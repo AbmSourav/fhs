@@ -1,0 +1,94 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker-configs/php/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: fhs-php:latest
+    container_name: fhs-php
+    restart: unless-stopped
+    environment:
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      # www-data has no writable home in the base image; tinker/psysh and
+      # composer both need one for their caches.
+      HOME: /var/www/html/storage/framework/container-home
+      COMPOSER_HOME: /var/www/html/storage/framework/container-home/composer
+    volumes:
+      - ./:/var/www/html:cached
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    image: caddy:2-alpine
+    container_name: fhs-caddy
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-7080}:80"
+    volumes:
+      - ./docker-configs/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./:/var/www/html:cached
+    depends_on:
+      - php
+
+  vite:
+    build:
+      context: .
+      dockerfile: docker-configs/node/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: fhs-node:latest
+    container_name: fhs-vite
+    restart: unless-stopped
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    volumes:
+      - ./:/var/www/html:cached
+    environment:
+      # Vite binds inside the container; the browser reaches it on the host port.
+      # Host binding, origin and CORS all live in vite.config.js, which reads
+      # APP_PORT straight from .env.
+      VITE_PORT: 5173
+
+  redis:
+    image: redis:7-alpine
+    container_name: fhs-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-secret}
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: fhs-redisinsight
+    restart: unless-stopped
+    ports:
+      - "${REDIS_INSIGHT_PORT:-5541}:5540"
+    depends_on:
+      - redis
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: fhs-postgres
+    restart: unless-stopped
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-fhs}
+      POSTGRES_USER: ${DB_USERNAME:-fhs}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - ./db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-fhs} -d ${DB_DATABASE:-fhs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

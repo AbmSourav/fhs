@@ -1,0 +1,40 @@
+{
+	# Global options
+	admin off
+	auto_https off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	root * /var/www/html/public
+	encode zstd gzip
+
+	# Static assets — let Caddy serve directly with caching
+	@static {
+		file
+		path *.ico *.css *.js *.gif *.jpg *.jpeg *.png *.svg *.woff *.woff2 *.ttf *.eot *.webp *.avif *.map
+	}
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Hand PHP requests off to php-fpm
+	php_fastcgi php:9000 {
+		# Trusted proxies inherits from global
+	}
+
+	file_server
+
+	log {
+		output stdout
+		format console
+	}
+}
