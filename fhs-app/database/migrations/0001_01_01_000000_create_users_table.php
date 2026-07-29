@@ -17,6 +17,9 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            // Per-user capability overrides. Null means "no explicit grants" —
+            // the user falls back to whatever their role allows.
+            $table->json('permission')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

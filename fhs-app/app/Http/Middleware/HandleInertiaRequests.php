@@ -44,6 +44,10 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $request->user(),
+                // Drives admin-only UI. The frontend flag is a convenience for
+                // rendering; every privileged route must still authorise on the
+                // server via the "admin" gate.
+                'isAdmin' => (bool) $request->user()?->isAdmin(),
             ],
         ]);
     }

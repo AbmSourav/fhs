@@ -15,6 +15,10 @@ class User extends Authenticatable
     /**
      * The attributes that are mass assignable.
      *
+     * "permission" is deliberately excluded: it is a privilege field, and
+     * mass-assigning it from request data would allow privilege escalation.
+     * Assign it explicitly instead.
+     *
      * @var list<string>
      */
     protected $fillable = [
@@ -43,6 +47,21 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'permission' => 'array',
         ];
+    }
+
+    /**
+     * Determine whether this user is an administrator.
+     *
+     * Administrators are identified by email address via config, so the set of
+     * admins is fixed by deployment rather than editable in the application.
+     */
+    public function isAdmin(): bool
+    {
+        $email = strtolower(trim((string) $this->email));
+
+        return $email !== ''
+            && in_array($email, config('app.admin_emails', []), strict: true);
     }
 }

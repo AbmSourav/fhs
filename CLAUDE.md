@@ -82,6 +82,48 @@ The application itself is in `fhs-app/`.
 
 Everything runs in Docker. There is no host-side PHP or Node dependency.
 
+## Authorisation
+
+Administrators are identified by email address, listed in `ADMIN_EMAILS`
+(comma-separated, case-insensitive) and read via `config('app.admin_emails')`.
+There is no `role` column and no admin management UI — the admin set is fixed
+by deployment.
+
+Authorise through the **`admin` gate**, never by calling `isAdmin()` or reading
+the config directly:
+
+```php
+Gate::authorize('admin');                    // in a controller
+Route::get(...)->middleware('can:admin');    // on a route
+```
+
+`auth.isAdmin` is shared to the frontend for rendering admin-only UI. It is a
+convenience only — every privileged route must still authorise server-side.
+
+When staff roles beyond a single admin are needed, replace the config lookup in
+`User::isAdmin()` with a real role column. The gate keeps call sites unchanged.
+
+### User types
+
+Three types are planned: **admin**, **founder**, **investor**. Admins create
+founder and investor accounts from the dashboard and pass the credentials to
+them out of band — there is no self-registration for those types.
+
+`users.permission` is a nullable JSON column holding per-user capability
+overrides. Null means "no explicit grants", so the user falls back to whatever
+their type allows. The role/type column itself is not built yet.
+
+**`permission` is not mass-assignable.** It is a privilege field and is
+deliberately excluded from `$fillable`; assign it explicitly. Never add it to a
+form request's validated data.
+
+## Known issues
+
+- `ProfileUpdateRequest` validates only `name`, so `email` is stripped from the
+  validated data and profile email updates silently do nothing. This fails
+  `ProfileUpdateTest::test_profile_information_can_be_updated`. Pre-existing,
+  introduced by the Laravel 13 upgrade of the starter kit.
+
 ## Working in this repo
 
 **Run commands inside the containers**, never on the host:

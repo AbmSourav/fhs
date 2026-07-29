@@ -2,6 +2,8 @@ import { LucideIcon } from 'lucide-react';
 
 export interface Auth {
     user: User;
+    /** Convenience flag for admin-only UI; the server still authorises. */
+    isAdmin: boolean;
 }
 
 export interface BreadcrumbItem {

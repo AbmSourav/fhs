@@ -23,8 +23,8 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
     const { auth } = usePage<SharedData>().props;
 
     const { data, setData, patch, errors, processing, recentlySuccessful } = useForm({
-        name: auth.user.name,
-        email: auth.user.email,
+        name: auth.user.name
+        // email: auth.user.email,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -38,7 +38,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
             <Head title="Profile settings" />
 
             <SettingsLayout>
-                <div className="space-y-6">
+                <div className="space-y-6 mb-[100px]">
                     <HeadingSmall title="Profile information" description="Update your name and email address" />
 
                     <form onSubmit={submit} className="space-y-6">
@@ -58,7 +58,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                             <InputError className="mt-2" message={errors.name} />
                         </div>
 
-                        <div className="grid gap-2">
+                        {/* <div className="grid gap-2">
                             <Label htmlFor="email">Email address</Label>
 
                             <Input
@@ -73,7 +73,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                             />
 
                             <InputError className="mt-2" message={errors.email} />
-                        </div>
+                        </div> */}
 
                         {mustVerifyEmail && auth.user.email_verified_at === null && (
                             <div>

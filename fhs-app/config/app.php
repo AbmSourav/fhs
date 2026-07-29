@@ -123,4 +123,21 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Administrator Emails
+    |--------------------------------------------------------------------------
+    |
+    | Users whose email address appears in this list are treated as
+    | administrators. Addresses are normalised to lowercase so comparisons are
+    | case-insensitive. Authorisation is checked via the "admin" gate, not by
+    | reading this value directly.
+    |
+    */
+
+    'admin_emails' => array_values(array_filter(array_map(
+        static fn (string $email): string => strtolower(trim($email)),
+        explode(',', (string) env('ADMIN_EMAILS', '')),
+    ))),
+
 ];
