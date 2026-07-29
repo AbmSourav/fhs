@@ -28,18 +28,18 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
     return (
         <div className="px-4 py-6">
-            <Heading title="Settings" description="Manage your profile and account settings" />
+            <Heading title="" />
 
             <div className="flex flex-col space-y-8 lg:flex-row lg:space-y-0 lg:space-x-12">
-                <aside className="w-full max-w-xl lg:w-48">
-                    <nav className="flex flex-col space-y-1 space-x-0">
+                <aside className="w-full max-w-xl lg:w-48 lg:mt-[-30px]">
+                    <nav className="grid grid-cols-3 gap-2 lg:grid-cols-1">
                         {sidebarNavItems.map((item) => (
                             <Button
                                 key={item.url}
                                 size="sm"
                                 variant="ghost"
                                 asChild
-                                className={cn('w-full justify-start', {
+                                className={cn('w-full justify-start rounded border', {
                                     'bg-muted': currentPath === item.url,
                                 })}
                             >
