@@ -49,6 +49,10 @@ class HandleInertiaRequests extends Middleware
                 // server via the "admin" gate.
                 'isAdmin' => (bool) $request->user()?->isAdmin(),
             ],
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'error'   => $request->session()->get('error'),
+            ],
         ]);
     }
 }

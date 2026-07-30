@@ -27,7 +27,14 @@ export interface SharedData {
     name: string;
     quote: { message: string; author: string };
     auth: Auth;
+    /** One-request-only messages from the server, surfaced as toasts. */
+    flash: Flash;
     [key: string]: unknown;
+}
+
+export interface Flash {
+    success: string | null;
+    error: string | null;
 }
 
 export interface User {
