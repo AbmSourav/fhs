@@ -23,9 +23,3 @@ export interface CatalogueItem {
     /** Negative stock is allowed and flagged, not prevented. */
     has_negative_stock: boolean;
 }
-
-/** Trimmed catalogue record for the "recently added" list on the setup page. */
-export interface RecentCatalogueItem {
-    id: number;
-    display_name: string;
-}

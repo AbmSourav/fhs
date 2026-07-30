@@ -27,9 +27,8 @@ class CatalogueController extends Controller
     public function setup(): Response
     {
         return Inertia::render('catalogue/setup', [
-            'types' => $this->catalogue->typeOptions(),
+            'types'  => $this->catalogue->typeOptions(),
             'brands' => $this->brands->activeOptions(),
-            'recentItems' => $this->catalogue->recentItems(),
         ]);
     }
 

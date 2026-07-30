@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type BrandOption } from '@/types/brand';
-import { type RecentCatalogueItem } from '@/types/catalogue';
 import { type InventoryTypeOption } from '@/types/inventory-type';
 import { Transition } from '@headlessui/react';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -23,10 +22,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface SetupProps {
     types: InventoryTypeOption[];
     brands: BrandOption[];
-    recentItems: RecentCatalogueItem[];
 }
 
-export default function CatalogueSetup({ types, brands, recentItems }: SetupProps) {
+export default function CatalogueSetup({ types, brands }: SetupProps) {
     const { data, setData, post, errors, processing, recentlySuccessful, reset } = useForm({
         name: '',
         type: '',
@@ -158,22 +156,6 @@ export default function CatalogueSetup({ types, brands, recentItems }: SetupProp
                             </Transition>
                         </div>
                     </form>
-
-                    <div className="space-y-4">
-                        <HeadingSmall title="Recently added" description="The last items added to the catalogue" />
-
-                        {recentItems.length === 0 ? (
-                            <p className="text-muted-foreground rounded-lg border border-dashed px-4 py-8 text-center text-sm">Nothing added yet.</p>
-                        ) : (
-                            <ul className="divide-y rounded-lg border">
-                                {recentItems.map((item) => (
-                                    <li key={item.id} className="px-4 py-3 text-sm font-medium">
-                                        {item.display_name}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
                 </div>
             </div>
         </AppLayout>

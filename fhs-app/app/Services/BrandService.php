@@ -21,7 +21,7 @@ class BrandService
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'name'      => ['required', 'string', 'max:255'],
             'is_active' => ['boolean'],
         ];
     }
@@ -45,8 +45,8 @@ class BrandService
         $this->assertNameIsAvailable($name);
 
         return Brand::create([
-            'name' => $name,
-            'slug' => $this->uniqueSlugFor($name),
+            'name'      => $name,
+            'slug'      => $this->uniqueSlugFor($name),
             'is_active' => (bool) ($data['is_active'] ?? true),
         ]);
     }

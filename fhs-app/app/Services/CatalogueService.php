@@ -24,10 +24,10 @@ class CatalogueService
     {
         return [
             // Optional: displayName() falls back to brand + type + weight.
-            'name' => ['nullable', 'string', 'max:255'],
-            'type' => ['required', Rule::enum(InventoryType::class)],
+            'name'     => ['nullable', 'string', 'max:255'],
+            'type'     => ['required', Rule::enum(InventoryType::class)],
             'brand_id' => ['required', 'integer', 'exists:brands,id'],
-            'weight' => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
+            'weight'   => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
         ];
     }
 
@@ -54,12 +54,12 @@ class CatalogueService
         $attributes = [
             // Store null rather than an empty string, so displayName() falls
             // back to the generated label.
-            'name' => $name !== '' ? $name : null,
-            'type' => $type,
+            'name'     => $name !== '' ? $name : null,
+            'type'     => $type,
             'brand_id' => $data['brand_id'] ?: null,
-            'weight' => (float) $data['weight'],
+            'weight'   => (float) $data['weight'],
             // Derived from the type, never taken from the request.
-            'is_gas' => $type->isGas(),
+            'is_gas'        => $type->isGas(),
             'is_returnable' => $type->isReturnable(),
         ];
 
@@ -83,17 +83,17 @@ class CatalogueService
             ->orderBy('weight')
             ->get()
             ->map(fn (Catalogue $item) => [
-                'id' => $item->id,
-                'name' => $item->name,
-                'type' => $item->type->value,
-                'type_label' => $item->type->label(),
-                'brand_name' => $item->brand?->name,
-                'weight' => (float) $item->weight,
-                'is_gas' => $item->is_gas,
+                'id'            => $item->id,
+                'name'          => $item->name,
+                'type'          => $item->type->value,
+                'type_label'    => $item->type->label(),
+                'brand_name'    => $item->brand?->name,
+                'weight'        => (float) $item->weight,
+                'is_gas'        => $item->is_gas,
                 'is_returnable' => $item->is_returnable,
-                'display_name' => $item->displayName(),
-                'filled_stock' => $item->filledStock(),
-                'empty_stock' => $item->emptyStock(),
+                'display_name'  => $item->displayName(),
+                'filled_stock'  => $item->filledStock(),
+                'empty_stock'   => $item->emptyStock(),
                 // Negative stock is allowed — the business sells first and
                 // reconciles later — so it is surfaced rather than prevented.
                 'has_negative_stock' => $item->hasNegativeStock(),
@@ -108,7 +108,7 @@ class CatalogueService
             ->limit($limit)
             ->get()
             ->map(fn (Catalogue $item) => [
-                'id' => $item->id,
+                'id'           => $item->id,
                 'display_name' => $item->displayName(),
             ]);
     }
@@ -118,9 +118,9 @@ class CatalogueService
     {
         return array_map(
             fn (InventoryType $type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
-                'is_gas' => $type->isGas(),
+                'value'         => $type->value,
+                'label'         => $type->label(),
+                'is_gas'        => $type->isGas(),
                 'is_returnable' => $type->isReturnable(),
             ],
             InventoryType::cases(),
