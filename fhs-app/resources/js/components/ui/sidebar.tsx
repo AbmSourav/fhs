@@ -1,6 +1,6 @@
 import { Slot } from '@radix-ui/react-slot';
 import { VariantProps, cva } from 'class-variance-authority';
-import { PanelLeft } from 'lucide-react';
+import { Menu, PanelLeft } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -235,14 +235,15 @@ const SidebarTrigger = React.forwardRef<React.ElementRef<typeof Button>, React.C
                 data-sidebar="trigger"
                 variant="ghost"
                 size="icon"
-                className={cn('h-7 w-7', className)}
+                className={cn('h-9 w-9 [&_svg]:size-7 md:h-7 md:w-7 md:[&_svg]:size-4', className)}
                 onClick={(event) => {
                     onClick?.(event);
                     toggleSidebar();
                 }}
                 {...props}
             >
-                <PanelLeft />
+                <Menu className="md:hidden" />
+                <PanelLeft className="hidden md:block" />
                 <span className="sr-only">Toggle Sidebar</span>
             </Button>
         );

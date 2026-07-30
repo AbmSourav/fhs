@@ -16,14 +16,14 @@ namespace App\Enums;
 enum InventoryType: string
 {
     case LpgCylinder = 'lpg_cylinder';
-    case RiceBag = 'rice_bag';
+    // case RiceBag = 'rice_bag';
 
     /** Bought through gas_inventory_purchases, with shell and gas costed separately. */
     public function isGas(): bool
     {
         return match ($this) {
             self::LpgCylinder => true,
-            self::RiceBag     => false,
+            // self::RiceBag     => false,
         };
     }
 
@@ -32,7 +32,7 @@ enum InventoryType: string
     {
         return match ($this) {
             self::LpgCylinder => true,
-            self::RiceBag     => false,
+            // self::RiceBag     => false,
         };
     }
 
@@ -40,7 +40,7 @@ enum InventoryType: string
     {
         return match ($this) {
             self::LpgCylinder => 'LPG cylinder',
-            self::RiceBag     => 'Rice bag',
+            // self::RiceBag     => 'Rice bag',
         };
     }
 }

@@ -24,12 +24,12 @@ class Catalogue extends Model
     protected $table = 'catalogue';
 
     protected $fillable = [
+        'name',
         'type',
         'brand_id',
         'weight',
         'is_gas',
         'is_returnable',
-        'is_active',
     ];
 
     protected function casts(): array
@@ -39,7 +39,6 @@ class Catalogue extends Model
             'weight'        => 'decimal:2',
             'is_gas'        => 'boolean',
             'is_returnable' => 'boolean',
-            'is_active'     => 'boolean',
         ];
     }
 
@@ -79,11 +78,6 @@ class Catalogue extends Model
         return $query
             ->withSum('movements as filled_stock', 'filled_stock_change')
             ->withSum('movements as empty_stock', 'empty_stock_change');
-    }
-
-    public function scopeActive(Builder $query): Builder
-    {
-        return $query->where('is_active', true);
     }
 
     public function scopeGas(Builder $query): Builder
@@ -133,8 +127,16 @@ class Catalogue extends Model
         return $owned - $this->filledStock() - $this->emptyStock();
     }
 
+    /**
+     * A stored name wins; otherwise build one from brand + type + weight, which
+     * is right for most products and saves typing a name for every combination.
+     */
     public function displayName(): string
     {
+        if (filled($this->name)) {
+            return $this->name;
+        }
+
         return trim(sprintf(
             '%s %s %skg',
             $this->brand?->name ?? '',

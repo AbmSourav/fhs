@@ -26,6 +26,8 @@ return new class extends Migration
         Schema::create('catalogue', function (Blueprint $table) {
             $table->id();
 
+            $table->string('name')->nullable();
+
             // e.g. lpg_cylinder, rice_bag. Backed by the InventoryType enum
             // rather than a lookup table, so adding a type needs no migration.
             $table->string('type')->index();
@@ -43,10 +45,6 @@ return new class extends Migration
             // true for cylinders — drives whether empty-shell tracking applies.
             // Distinct from is_gas: a returnable non-gas container is possible.
             $table->boolean('is_returnable')->default(false);
-
-            // false retires a product from the order form without deleting
-            // history. Distinct from soft delete, which means "this was a mistake".
-            $table->boolean('is_active')->default(true);
 
             $table->timestamps();
             // Four tables reference this row; never hard-delete.
