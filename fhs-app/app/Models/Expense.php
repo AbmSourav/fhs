@@ -35,10 +35,10 @@ class Expense extends Model
     protected function casts(): array
     {
         return [
-            'category' => ExpenseCategory::class,
+            'category'       => ExpenseCategory::class,
             'payment_method' => PaymentMethod::class,
-            'amount' => 'decimal:2',
-            'spent_at' => 'datetime',
+            'amount'         => 'decimal:2',
+            'spent_at'       => 'datetime',
         ];
     }
 

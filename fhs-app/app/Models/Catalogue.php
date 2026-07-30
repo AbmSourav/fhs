@@ -35,11 +35,11 @@ class Catalogue extends Model
     protected function casts(): array
     {
         return [
-            'type' => InventoryType::class,
-            'weight' => 'decimal:2',
-            'is_gas' => 'boolean',
+            'type'          => InventoryType::class,
+            'weight'        => 'decimal:2',
+            'is_gas'        => 'boolean',
             'is_returnable' => 'boolean',
-            'is_active' => 'boolean',
+            'is_active'     => 'boolean',
         ];
     }
 

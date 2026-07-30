@@ -32,11 +32,11 @@ class InventoryPurchase extends Model
     protected function casts(): array
     {
         return [
-            'quantity' => 'integer',
-            'unit_cost' => 'decimal:2',
+            'quantity'       => 'integer',
+            'unit_cost'      => 'decimal:2',
             'transport_cost' => 'decimal:2',
-            'other_cost' => 'decimal:2',
-            'purchased_at' => 'datetime',
+            'other_cost'     => 'decimal:2',
+            'purchased_at'   => 'datetime',
         ];
     }
 

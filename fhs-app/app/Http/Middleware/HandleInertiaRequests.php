@@ -40,9 +40,9 @@ class HandleInertiaRequests extends Middleware
 
         return array_merge(parent::share($request), [
             ...parent::share($request),
-            'name' => config('app.name'),
+            'name'  => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
-            'auth' => [
+            'auth'  => [
                 'user' => $request->user(),
                 // Drives admin-only UI. The frontend flag is a convenience for
                 // rendering; every privileged route must still authorise on the

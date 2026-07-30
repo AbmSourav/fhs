@@ -37,12 +37,12 @@ enum MovementReason: string
     public function label(): string
     {
         return match ($this) {
-            self::Purchase => 'Purchase',
-            self::Sale => 'Sale',
-            self::Swap => 'Swap',
-            self::Refill => 'Refill',
+            self::Purchase   => 'Purchase',
+            self::Sale       => 'Sale',
+            self::Swap       => 'Swap',
+            self::Refill     => 'Refill',
             self::Adjustment => 'Adjustment',
-            self::Reversal => 'Reversal',
+            self::Reversal   => 'Reversal',
         };
     }
 }

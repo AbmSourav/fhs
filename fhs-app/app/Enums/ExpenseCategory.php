@@ -26,13 +26,13 @@ enum ExpenseCategory: string
     public function label(): string
     {
         return match ($this) {
-            self::Equipment => 'Equipment',
-            self::Transport => 'Transport',
-            self::Utilities => 'Utilities',
-            self::Salary => 'Salary',
-            self::Rent => 'Rent',
+            self::Equipment   => 'Equipment',
+            self::Transport   => 'Transport',
+            self::Utilities   => 'Utilities',
+            self::Salary      => 'Salary',
+            self::Rent        => 'Rent',
             self::Maintenance => 'Maintenance',
-            self::Other => 'Other',
+            self::Other       => 'Other',
         };
     }
 }

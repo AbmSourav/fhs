@@ -31,10 +31,10 @@ enum OrderStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Pending => 'Pending',
+            self::Pending    => 'Pending',
             self::Processing => 'Processing',
-            self::Complete => 'Complete',
-            self::Failed => 'Failed',
+            self::Complete   => 'Complete',
+            self::Failed     => 'Failed',
         };
     }
 }

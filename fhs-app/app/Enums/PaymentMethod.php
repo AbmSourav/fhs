@@ -16,7 +16,7 @@ enum PaymentMethod: string
     public function label(): string
     {
         return match ($this) {
-            self::Cash => 'Cash',
+            self::Cash   => 'Cash',
             self::Mobile => 'Mobile payment',
         };
     }

@@ -37,14 +37,14 @@ class GasInventoryPurchase extends Model
     protected function casts(): array
     {
         return [
-            'new_stock' => 'boolean',
+            'new_stock'       => 'boolean',
             'filled_quantity' => 'integer',
-            'empty_quantity' => 'integer',
+            'empty_quantity'  => 'integer',
             'shell_unit_cost' => 'decimal:2',
-            'gas_unit_cost' => 'decimal:2',
-            'transport_cost' => 'decimal:2',
-            'other_cost' => 'decimal:2',
-            'purchased_at' => 'datetime',
+            'gas_unit_cost'   => 'decimal:2',
+            'transport_cost'  => 'decimal:2',
+            'other_cost'      => 'decimal:2',
+            'purchased_at'    => 'datetime',
         ];
     }
 

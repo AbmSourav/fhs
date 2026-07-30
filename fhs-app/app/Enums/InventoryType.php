@@ -23,7 +23,7 @@ enum InventoryType: string
     {
         return match ($this) {
             self::LpgCylinder => true,
-            self::RiceBag => false,
+            self::RiceBag     => false,
         };
     }
 
@@ -32,7 +32,7 @@ enum InventoryType: string
     {
         return match ($this) {
             self::LpgCylinder => true,
-            self::RiceBag => false,
+            self::RiceBag     => false,
         };
     }
 
@@ -40,7 +40,7 @@ enum InventoryType: string
     {
         return match ($this) {
             self::LpgCylinder => 'LPG cylinder',
-            self::RiceBag => 'Rice bag',
+            self::RiceBag     => 'Rice bag',
         };
     }
 }

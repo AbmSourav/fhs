@@ -36,10 +36,10 @@ class OrderItem extends Model
     {
         return [
             'transaction_type' => TransactionType::class,
-            'quantity' => 'integer',
-            'unit_price' => 'decimal:2',
-            'unit_cost' => 'decimal:2',
-            'line_total' => 'decimal:2',
+            'quantity'         => 'integer',
+            'unit_price'       => 'decimal:2',
+            'unit_cost'        => 'decimal:2',
+            'line_total'       => 'decimal:2',
         ];
     }
 
@@ -74,7 +74,7 @@ class OrderItem extends Model
 
         return [
             'filled' => $perUnit['filled'] * $this->quantity,
-            'empty' => $perUnit['empty'] * $this->quantity,
+            'empty'  => $perUnit['empty'] * $this->quantity,
         ];
     }
 }

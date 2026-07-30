@@ -31,7 +31,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             <Heading title="" />
 
             <div className="flex flex-col space-y-8 lg:flex-row lg:space-y-0 lg:space-x-12">
-                <aside className="w-full max-w-xl lg:w-48 lg:mt-[-30px]">
+                <aside className="w-full max-w-xl lg:mt-[-30px] lg:w-48">
                     <nav className="grid grid-cols-3 gap-2 lg:grid-cols-1">
                         {sidebarNavItems.map((item) => (
                             <Button

@@ -34,10 +34,10 @@ class InventoryMovement extends Model
     protected function casts(): array
     {
         return [
-            'reason' => MovementReason::class,
+            'reason'              => MovementReason::class,
             'filled_stock_change' => 'integer',
-            'empty_stock_change' => 'integer',
-            'occurred_at' => 'datetime',
+            'empty_stock_change'  => 'integer',
+            'occurred_at'         => 'datetime',
         ];
     }
 
@@ -62,9 +62,9 @@ class InventoryMovement extends Model
     public function assertSingleSource(): void
     {
         $sources = array_filter([
-            'order_id' => $this->order_id,
+            'order_id'                  => $this->order_id,
             'gas_inventory_purchase_id' => $this->gas_inventory_purchase_id,
-            'inventory_purchase_id' => $this->inventory_purchase_id,
+            'inventory_purchase_id'     => $this->inventory_purchase_id,
         ], fn ($id) => $id !== null);
 
         if (count($sources) > 1) {
@@ -115,13 +115,13 @@ class InventoryMovement extends Model
     public function reverse(string $note): self
     {
         return static::create([
-            'catalogue_id' => $this->catalogue_id,
-            'order_id' => $this->order_id,
-            'reason' => MovementReason::Reversal,
+            'catalogue_id'        => $this->catalogue_id,
+            'order_id'            => $this->order_id,
+            'reason'              => MovementReason::Reversal,
             'filled_stock_change' => -$this->filled_stock_change,
-            'empty_stock_change' => -$this->empty_stock_change,
-            'note' => $note,
-            'occurred_at' => now(),
+            'empty_stock_change'  => -$this->empty_stock_change,
+            'note'                => $note,
+            'occurred_at'         => now(),
         ]);
     }
 }

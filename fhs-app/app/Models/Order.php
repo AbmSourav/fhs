@@ -33,8 +33,8 @@ class Order extends Model
     {
         return [
             'total_amount' => 'decimal:2',
-            'status' => OrderStatus::class,
-            'occurred_at' => 'datetime',
+            'status'       => OrderStatus::class,
+            'occurred_at'  => 'datetime',
         ];
     }
 
@@ -109,8 +109,8 @@ class Order extends Model
 
         return match (true) {
             $paid >= (float) $this->total_amount => 'paid',
-            $paid > 0 => 'partial',
-            default => 'due',
+            $paid > 0                            => 'partial',
+            default                              => 'due',
         };
     }
 

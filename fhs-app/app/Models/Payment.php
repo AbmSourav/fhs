@@ -30,8 +30,8 @@ class Payment extends Model
     protected function casts(): array
     {
         return [
-            'amount' => 'decimal:2',
-            'method' => PaymentMethod::class,
+            'amount'  => 'decimal:2',
+            'method'  => PaymentMethod::class,
             'paid_at' => 'datetime',
         ];
     }

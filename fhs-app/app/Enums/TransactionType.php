@@ -33,10 +33,10 @@ enum TransactionType: string
     public function stockChangePerUnit(): array
     {
         return match ($this) {
-            self::Swap => ['filled' => -1, 'empty' => +1],
+            self::Swap       => ['filled' => -1, 'empty' => +1],
             self::BuyWithGas => ['filled' => -1, 'empty' => 0],
-            self::BuyEmpty => ['filled' => 0, 'empty' => -1],
-            self::PlainSale => ['filled' => -1, 'empty' => 0],
+            self::BuyEmpty   => ['filled' => 0, 'empty' => -1],
+            self::PlainSale  => ['filled' => -1, 'empty' => 0],
         };
     }
 
@@ -55,10 +55,10 @@ enum TransactionType: string
     public function label(): string
     {
         return match ($this) {
-            self::Swap => 'Swap / refill',
+            self::Swap       => 'Swap / refill',
             self::BuyWithGas => 'Buy cylinder with gas',
-            self::BuyEmpty => 'Buy empty cylinder',
-            self::PlainSale => 'Sale',
+            self::BuyEmpty   => 'Buy empty cylinder',
+            self::PlainSale  => 'Sale',
         };
     }
 }
