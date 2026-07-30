@@ -26,11 +26,18 @@ These shape the data model. Get them right before adding features.
 
 ### Sales are recorded after the fact
 
-Staff log **completed sales**, not orders in progress. There is no order
-lifecycle, no delivery status, no assignment to a delivery person. A sale is
-a finished transaction by the time it is entered.
+Staff log **completed sales**, not orders in progress. A sale is a finished
+transaction by the time it is entered, so orders are created with
+`status = complete`.
 
-Delivery is how the business operates, but it is not a workflow the app models.
+`orders.status` does carry fulfilment states — `pending`, `processing`,
+`complete`, `failed` — but **no workflow drives them yet**. The column exists so
+a lifecycle can be introduced later without a migration. Until that is built,
+do not add delivery assignment, status transitions, or notifications.
+
+Note that `status` is fulfilment only. **Payment state is derived**, never
+stored: `SUM(orders.total_amount) − SUM(payments.amount)`, excluding failed
+orders. There is deliberately no `paid_amount` column.
 
 ### Cylinders: swap is the common case, not the only one
 
