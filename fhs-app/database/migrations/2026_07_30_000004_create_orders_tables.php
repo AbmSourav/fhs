@@ -42,7 +42,14 @@ return new class extends Migration
         Schema::create('order_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
-            $table->foreignId('catalogue_id')->constrained('catalogue');
+            $table->foreignId('catalogue_id')->constrained('catalogue')->comment('what was sold');
+
+            // The shell handed back, when it is not the same product that was
+            // sold — a customer may swap in another brand's or size's empty.
+            // Null means the returned shell matches catalogue_id, the ordinary
+            // case. Set, a swap moves stock for two different catalogue items:
+            // gas leaves one, an empty shell arrives on the other.
+            $table->foreignId('returned_catalogue_id')->nullable()->constrained('catalogue');
 
             // Per line, not per order: one sale can mix a swap with a plain sale.
             // Also decides which cost basis applies.
