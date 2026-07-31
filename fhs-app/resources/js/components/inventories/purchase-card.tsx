@@ -38,7 +38,7 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
                 {purchase.is_refill && (
                     <Badge variant="secondary" className="shrink-0 gap-1">
                         <RotateCcw className="size-3" />
-                        Refill
+                        Swap
                     </Badge>
                 )}
             </div>
@@ -67,6 +67,15 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
                                 <div>
                                     <dt className="text-muted-foreground text-xs">{purchase.is_refill ? 'Empties sent' : 'Empty'}</dt>
                                     <dd className="mt-0.5 font-medium tabular-nums">{purchase.empty_quantity}</dd>
+                                </div>
+                            )}
+
+                            {/* Set only on a cross-brand swap: the empties that
+                                went back were a different product. */}
+                            {purchase.swapped_for && (
+                                <div>
+                                    <dt className="text-muted-foreground text-xs">Empties brand</dt>
+                                    <dd className="mt-0.5 font-medium">{purchase.swapped_for}</dd>
                                 </div>
                             )}
 

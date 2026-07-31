@@ -17,13 +17,20 @@ return new class extends Migration
     {
         Schema::create('gas_inventory_purchases', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('catalogue_id')->constrained('catalogue');
-            $table->string('supplier')->nullable();
+            $table->foreignId('catalogue_id')->constrained('catalogue')->comment('what came back filled');
 
-            // false for a gas refill. A refill returns gas in shells already
-            // owned, so it must not increase the shell count — otherwise ten
-            // refills of 5 look like 50 cylinders that were never bought.
-            $table->boolean('new_stock')->default(true);
+            // Whose empties were sent, and so whether this is a swap at all:
+            //
+            //   null                    new purchase, nothing sent back
+            //   equal to catalogue_id   same-brand swap
+            //   different               cross-brand swap
+            //
+            // A swap must not increase the shell count — it returns gas in
+            // shells already owned. Otherwise ten swaps of 5 would look like 50
+            // cylinders that were never bought.
+            $table->foreignId('swap_catalogue_id')->nullable()->constrained('catalogue');
+
+            $table->string('supplier')->nullable();
 
             $table->integer('filled_quantity')->default(0);
             $table->integer('empty_quantity')->default(0);
@@ -44,8 +51,9 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['catalogue_id', 'purchased_at']);
-            // Shell-cost averages filter on this.
-            $table->index(['catalogue_id', 'new_stock']);
+            // Shell-cost averages filter on this: purchases that acquired
+            // shells are those with no swap_catalogue_id.
+            $table->index(['catalogue_id', 'swap_catalogue_id']);
         });
 
         // Plain goods: one quantity, one cost, no shells, no refills.

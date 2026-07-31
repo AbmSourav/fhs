@@ -29,7 +29,10 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
         supplier: '',
         invoice_ref: '',
         purchased_at: today(),
-        new_stock: true,
+        // Whose empties were sent. Empty means cylinders were bought outright;
+        // set to the same product for a like-for-like swap, or another product
+        // when the supplier took a different brand back.
+        swap_catalogue_id: '',
         filled_quantity: '',
         empty_quantity: '',
         shell_unit_cost: '',
@@ -44,7 +47,14 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
     // from the chosen item rather than asked separately.
     const selected = items.find((item) => String(item.id) === data.catalogue_id);
     const isGas = selected?.is_gas ?? false;
-    const isRefill = isGas && !data.new_stock;
+    const isRefill = isGas && data.swap_catalogue_id !== '';
+
+    // Only a returnable product has empties to send back.
+    const returnableItems = items.filter((item) => item.is_returnable);
+
+    // Toggling a swap on defaults to sending the same product's empties, which
+    // is the common case; the picker below changes it to another brand.
+    const toggleSwap = (isSwap: boolean) => setData('swap_catalogue_id', isSwap ? data.catalogue_id : '');
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -54,7 +64,16 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
             // Keep the supplier and date — purchases are usually entered in
             // batches from one invoice — but clear what differs per product.
             onSuccess: () =>
-                reset('catalogue_id', 'filled_quantity', 'empty_quantity', 'shell_unit_cost', 'gas_unit_cost', 'quantity', 'unit_cost'),
+                reset(
+                    'catalogue_id',
+                    'swap_catalogue_id',
+                    'filled_quantity',
+                    'empty_quantity',
+                    'shell_unit_cost',
+                    'gas_unit_cost',
+                    'quantity',
+                    'unit_cost',
+                ),
         });
     };
 
@@ -102,20 +121,51 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
                         </div>
 
                         {isGas && (
-                            <div className="flex items-center justify-between gap-4 rounded-md border p-4">
-                                <div className="grid gap-1">
-                                    <Label htmlFor="new_stock" className="font-medium">
-                                        New cylinders
-                                    </Label>
-                                    <p className="text-muted-foreground text-sm">Turn it off for a refill cylinders</p>
+                            <div className="rounded-md border p-4">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="grid gap-1">
+                                        <Label htmlFor="is_swap" className="font-medium">
+                                            Swap
+                                        </Label>
+                                        <p className="text-muted-foreground text-sm">Empty cylinders sent, filled ones received. No new shells bought.</p>
+                                    </div>
+
+                                    <Switch
+                                        id="is_swap"
+                                        checked={isRefill}
+                                        onCheckedChange={toggleSwap}
+                                        disabled={!data.catalogue_id}
+                                        className="shrink-0"
+                                    />
                                 </div>
 
-                                <Switch
-                                    id="new_stock"
-                                    checked={data.new_stock}
-                                    onCheckedChange={(checked) => setData('new_stock', checked)}
-                                    className="shrink-0"
-                                />
+                                {isRefill && (
+                                    <div className="mt-4 grid gap-2 border-t pt-4">
+                                        <Label htmlFor="swap_catalogue_id">Empties sent</Label>
+
+                                        <Select
+                                            value={data.swap_catalogue_id}
+                                            onValueChange={(value) => setData('swap_catalogue_id', value)}
+                                        >
+                                            <SelectTrigger id="swap_catalogue_id">
+                                                <SelectValue placeholder="Select a product" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {returnableItems.map((item) => (
+                                                    <SelectItem key={item.id} value={String(item.id)}>
+                                                        {item.display_name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+
+                                        <p className="text-muted-foreground text-xs">
+                                            Choose another brand if that is what was sent back.
+                                        </p>
+
+                                        <InputError message={errors.swap_catalogue_id} />
+                                    </div>
+                                )}
                             </div>
                         )}
 

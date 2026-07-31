@@ -21,8 +21,8 @@ class GasInventoryPurchase extends Model
 
     protected $fillable = [
         'catalogue_id',
+        'swap_catalogue_id',
         'supplier',
-        'new_stock',
         'filled_quantity',
         'empty_quantity',
         'shell_unit_cost',
@@ -37,7 +37,6 @@ class GasInventoryPurchase extends Model
     protected function casts(): array
     {
         return [
-            'new_stock'       => 'boolean',
             'filled_quantity' => 'integer',
             'empty_quantity'  => 'integer',
             'shell_unit_cost' => 'decimal:2',
@@ -63,10 +62,37 @@ class GasInventoryPurchase extends Model
         return $this->hasMany(InventoryMovement::class);
     }
 
-    /** Purchases that acquired shells — excludes gas refills. */
+    /** The product whose empties were sent. Null on a new purchase. */
+    public function swapCatalogueItem(): BelongsTo
+    {
+        return $this->belongsTo(Catalogue::class, 'swap_catalogue_id');
+    }
+
+    /**
+     * Gas returned in shells already owned, rather than cylinders bought.
+     *
+     * A swap acquires no shells, so it must not count toward shell totals.
+     */
+    public function isSwap(): bool
+    {
+        return $this->swap_catalogue_id !== null;
+    }
+
+    /**
+     * Were the empties sent a different product from what came back?
+     *
+     * The shells stay owned either way, so the overall total is unaffected —
+     * but each brand's individual count moves.
+     */
+    public function isCrossBrandSwap(): bool
+    {
+        return $this->isSwap() && $this->swap_catalogue_id !== $this->catalogue_id;
+    }
+
+    /** Purchases that acquired shells — excludes swaps. */
     public function scopeNewStock(Builder $query): Builder
     {
-        return $query->where('new_stock', true);
+        return $query->whereNull('swap_catalogue_id');
     }
 
     /**
@@ -81,11 +107,11 @@ class GasInventoryPurchase extends Model
             + (float) $this->other_cost;
     }
 
-    /** Shells acquired by this purchase. A refill acquires none. */
+    /** Shells acquired by this purchase. A swap acquires none. */
     public function shellsAcquired(): int
     {
-        return $this->new_stock
-            ? $this->filled_quantity + $this->empty_quantity
-            : 0;
+        return $this->isSwap()
+            ? 0
+            : $this->filled_quantity + $this->empty_quantity;
     }
 }

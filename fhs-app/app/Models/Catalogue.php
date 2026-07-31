@@ -110,8 +110,8 @@ class Catalogue extends Model
      * Shells owned but not physically held, because a customer bought a
      * cylinder outright and kept it.
      *
-     * Only `new_stock` purchases add shells: a refill returns gas in shells
-     * already owned, so counting it would inflate the total.
+     * Only purchases add shells: a swap returns gas in shells already owned, so
+     * counting it would inflate the total.
      */
     public function shellsOutWithCustomers(): int
     {
@@ -120,7 +120,7 @@ class Catalogue extends Model
         }
 
         $owned = (int) $this->gasPurchases()
-            ->where('new_stock', true)
+            ->whereNull('swap_catalogue_id')
             ->selectRaw('COALESCE(SUM(filled_quantity + empty_quantity), 0) as aggregate')
             ->value('aggregate');
 

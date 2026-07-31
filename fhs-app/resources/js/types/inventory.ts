@@ -15,8 +15,10 @@ export interface InventoryPurchase {
     supplier: string | null;
     invoice_ref: string | null;
     purchased_at: string;
-    /** A refill exchanges empties for filled ones; it acquires no new shells. */
+    /** A swap exchanges empties for filled ones; it acquires no new shells. */
     is_refill: boolean;
+    /** The product whose empties were sent, only on a cross-brand swap. */
+    swapped_for: string | null;
     filled_quantity: number;
     empty_quantity: number;
     /** Per shell. Always 0 on a refill — those shells are already owned. */

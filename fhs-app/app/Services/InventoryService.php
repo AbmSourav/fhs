@@ -43,8 +43,10 @@ class InventoryService
             'other_cost'     => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
 
             // Gas purchases: shells and gas are counted and costed separately.
-            'new_stock'       => ['boolean'],
-            'filled_quantity' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            // swap_catalogue_id says whose empties were sent, and so whether
+            // this is a swap at all — null means cylinders were bought.
+            'swap_catalogue_id' => ['nullable', 'integer', 'exists:catalogue,id'],
+            'filled_quantity'   => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'empty_quantity'  => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'shell_unit_cost' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'gas_unit_cost'   => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
@@ -81,10 +83,12 @@ class InventoryService
     }
 
     /**
-     * A cylinder purchase: filled and empty shells counted separately.
+     * A cylinder purchase or swap: filled and empty shells counted separately.
      *
-     * A refill (`new_stock` false) sends empties away and gets filled ones back,
-     * so it moves stock between the two counts without acquiring any shells.
+     * A swap sends empties away and gets filled cylinders back, moving stock
+     * between the two counts without acquiring any shells. The empties need not
+     * be the same product that comes back — the business can send one brand and
+     * receive another.
      *
      * @throws ValidationException
      */
@@ -99,43 +103,122 @@ class InventoryService
             ]);
         }
 
-        $isRefill = ! (bool) ($data['new_stock'] ?? true);
+        $swapItem = $this->resolveSwapItem($data, $empty);
 
-        // A refill returns gas in shells the business already owns. Sending no
-        // empties away means nothing was refilled.
-        if ($isRefill && $empty === 0) {
+        $purchase = GasInventoryPurchase::create([
+            'catalogue_id'      => $item->id,
+            'swap_catalogue_id' => $swapItem?->id,
+            'supplier'          => $data['supplier'] ?? null,
+            'filled_quantity'   => $filled,
+            'empty_quantity'    => $empty,
+            'shell_unit_cost'   => $data['shell_unit_cost'] ?? 0,
+            'gas_unit_cost'     => $data['gas_unit_cost'] ?? 0,
+            'transport_cost'    => $data['transport_cost'] ?? 0,
+            'other_cost'        => $data['other_cost'] ?? 0,
+            'invoice_ref'       => $data['invoice_ref'] ?? null,
+            'purchased_at'      => $data['purchased_at'],
+            'recorded_by'       => $recordedBy,
+        ]);
+
+        $this->recordGasMovements($purchase, $item, $swapItem, $filled, $empty);
+
+        return $purchase;
+    }
+
+    /**
+     * The product whose empties were sent, or null when cylinders were bought.
+     *
+     * @throws ValidationException
+     */
+    private function resolveSwapItem(array $data, int $empty): ?Catalogue
+    {
+        if (empty($data['swap_catalogue_id'])) {
+            return null;
+        }
+
+        // A swap returns gas in shells the business already owns. Sending no
+        // empties away means nothing was swapped.
+        if ($empty === 0) {
             throw ValidationException::withMessages([
-                'empty_quantity' => 'A refill exchanges empty cylinders for filled ones — enter how many empties were sent.',
+                'empty_quantity' => 'A swap exchanges empty cylinders for filled ones — enter how many empties were sent.',
             ]);
         }
 
-        $purchase = GasInventoryPurchase::create([
-            'catalogue_id'    => $item->id,
-            'supplier'        => $data['supplier'] ?? null,
-            'new_stock'       => ! $isRefill,
-            'filled_quantity' => $filled,
-            'empty_quantity'  => $empty,
-            'shell_unit_cost' => $data['shell_unit_cost'] ?? 0,
-            'gas_unit_cost'   => $data['gas_unit_cost'] ?? 0,
-            'transport_cost'  => $data['transport_cost'] ?? 0,
-            'other_cost'      => $data['other_cost'] ?? 0,
-            'invoice_ref'     => $data['invoice_ref'] ?? null,
-            'purchased_at'    => $data['purchased_at'],
-            'recorded_by'     => $recordedBy,
-        ]);
+        $swapItem = Catalogue::find($data['swap_catalogue_id']);
 
-        // On a refill the empties leave the premises, so they are deducted; on
-        // new stock everything that arrived is added.
+        // Only a returnable product has shells to send back.
+        if ($swapItem === null || ! $swapItem->is_returnable) {
+            throw ValidationException::withMessages([
+                'swap_catalogue_id' => 'Empty cylinders can only be sent for a returnable product.',
+            ]);
+        }
+
+        return $swapItem;
+    }
+
+    /**
+     * Put a gas purchase on the stock ledger.
+     *
+     * A cross-brand swap is two facts about two products — gas arrives on one,
+     * empties leave the other — so it appends two rows. One combined row would
+     * have to pick a single catalogue_id and would misstate both brands.
+     */
+    private function recordGasMovements(
+        GasInventoryPurchase $purchase,
+        Catalogue $item,
+        ?Catalogue $swapItem,
+        int $filled,
+        int $empty,
+    ): void {
+        // Bought outright: everything that arrived is added, shells included.
+        if ($swapItem === null) {
+            InventoryMovement::create([
+                'catalogue_id'              => $item->id,
+                'gas_inventory_purchase_id' => $purchase->id,
+                'reason'                    => MovementReason::Purchase,
+                'filled_stock_change'       => $filled,
+                'empty_stock_change'        => $empty,
+                'occurred_at'               => $purchase->purchased_at,
+            ]);
+
+            return;
+        }
+
+        // Same product on both sides: one row carries both changes.
+        if ($swapItem->id === $item->id) {
+            InventoryMovement::create([
+                'catalogue_id'              => $item->id,
+                'gas_inventory_purchase_id' => $purchase->id,
+                'reason'                    => MovementReason::Refill,
+                'filled_stock_change'       => $filled,
+                'empty_stock_change'        => -$empty,
+                'occurred_at'               => $purchase->purchased_at,
+            ]);
+
+            return;
+        }
+
+        // Filled cylinders arrive on the product received.
         InventoryMovement::create([
             'catalogue_id'              => $item->id,
             'gas_inventory_purchase_id' => $purchase->id,
-            'reason'                    => $isRefill ? MovementReason::Refill : MovementReason::Purchase,
+            'reason'                    => MovementReason::Refill,
             'filled_stock_change'       => $filled,
-            'empty_stock_change'        => $isRefill ? -$empty : $empty,
+            'empty_stock_change'        => 0,
+            'note'                      => "Swapped for {$swapItem->displayName()} empties",
             'occurred_at'               => $purchase->purchased_at,
         ]);
 
-        return $purchase;
+        // Empties leave the product sent.
+        InventoryMovement::create([
+            'catalogue_id'              => $swapItem->id,
+            'gas_inventory_purchase_id' => $purchase->id,
+            'reason'                    => MovementReason::Refill,
+            'filled_stock_change'       => 0,
+            'empty_stock_change'        => -$empty,
+            'note'                      => "Sent for {$item->displayName()} refill",
+            'occurred_at'               => $purchase->purchased_at,
+        ]);
     }
 
     /**
@@ -195,7 +278,10 @@ class InventoryService
         $gas = GasInventoryPurchase::query()
             // withTrashed: a purchase is a historical record, so it keeps its
             // product name even after that product leaves the catalogue.
-            ->with(['catalogueItem' => fn ($query) => $query->withTrashed()->with('brand')])
+            ->with([
+                'catalogueItem'     => fn ($query) => $query->withTrashed()->with('brand'),
+                'swapCatalogueItem' => fn ($query) => $query->withTrashed()->with('brand'),
+            ])
             ->latest('purchased_at')
             // Ties on purchased_at would otherwise make which rows survive the
             // limit arbitrary, and so different between requests.
@@ -247,7 +333,8 @@ class InventoryService
             'supplier'        => $purchase->supplier,
             'invoice_ref'     => $purchase->invoice_ref,
             'purchased_at'    => $purchase->purchased_at,
-            'is_refill'       => ! $purchase->new_stock,
+            'is_refill'       => $purchase->isSwap(),
+            'swapped_for'     => $purchase->isCrossBrandSwap() ? $purchase->swapCatalogueItem->brand->name : null,
             'filled_quantity' => $purchase->filled_quantity,
             'empty_quantity'  => $purchase->empty_quantity,
             'shell_unit_cost' => (float) $purchase->shell_unit_cost,
@@ -272,6 +359,7 @@ class InventoryService
             'invoice_ref'  => $purchase->invoice_ref,
             'purchased_at' => $purchase->purchased_at,
             'is_refill'       => false,
+            'swapped_for'     => null,
             'filled_quantity' => $purchase->quantity,
             'empty_quantity'  => 0,
             'shell_unit_cost' => 0.0,
