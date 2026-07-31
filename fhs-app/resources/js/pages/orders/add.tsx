@@ -7,15 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { type CustomerLookup, type SellableItem, type TransactionTypeOption } from '@/types/order';
+import { type CustomerLookup, type OrderFormValues, type SellableItem, type TransactionTypeOption } from '@/types/order';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
-
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Orders', href: '/orders' },
-    { title: 'Add', href: '/orders/add' },
-];
 
 /** Today in the `yyyy-mm-dd` shape a date input expects, in local time. */
 function today(): string {
@@ -30,30 +25,52 @@ const emptyLine: OrderLineValues = {
     returned_catalogue_id: '',
     quantity: '1',
     unit_price: '',
+    cylinder_price: '',
 };
 
 interface OrderAddProps {
     items: SellableItem[];
     transactionTypes: TransactionTypeOption[];
+    /** Absent when recording a sale; present when correcting one. */
+    order?: OrderFormValues;
+    /** Why this sale can no longer be corrected, when it cannot. */
+    blockedReason?: string | null;
 }
 
-export default function OrderAdd({ items, transactionTypes }: OrderAddProps) {
-    const { data, setData, post, errors, processing } = useForm({
-        mobile_number: '',
-        customer_name: '',
-        address: '',
-        occurred_at: today(),
-        items: [{ ...emptyLine }] as OrderLineValues[],
-        is_paid: true,
-        amount_paid: '',
-        payment_method: 'cash',
+export default function OrderForm({ items, transactionTypes, order, blockedReason }: OrderAddProps) {
+    const isEditing = order !== undefined;
+    const isLocked = Boolean(blockedReason);
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Orders', href: '/orders' },
+        isEditing ? { title: 'Edit', href: '#' } : { title: 'Add', href: '/orders/add' },
+    ];
+
+    const { data, setData, post, patch, errors, processing } = useForm({
+        mobile_number: order?.mobile_number ?? '',
+        customer_name: order?.customer_name ?? '',
+        address: order?.address ?? '',
+        occurred_at: order?.occurred_at ?? today(),
+        items: (order?.items ?? [{ ...emptyLine }]) as OrderLineValues[],
+        is_paid: order?.is_paid ?? true,
+        amount_paid: order?.amount_paid ?? '',
+        payment_method: order?.payment_method ?? 'cash',
     });
 
     // What a known customer already owes, shown so staff can mention it at the
     // door. Null until a number is looked up.
     const [knownCustomer, setKnownCustomer] = useState<CustomerLookup | null>(null);
 
-    const total = data.items.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unit_price) || 0), 0);
+    // A cylinder sold outright is priced as shell plus gas, so both count
+    // toward what the customer pays for that line.
+    const sellsShell = (line: OrderLineValues) =>
+        transactionTypes.find((option) => option.value === line.transaction_type)?.sells_shell ?? false;
+
+    const total = data.items.reduce((sum, line) => {
+        const unit = (Number(line.unit_price) || 0) + (sellsShell(line) ? Number(line.cylinder_price) || 0 : 0);
+
+        return sum + (Number(line.quantity) || 0) * unit;
+    }, 0);
 
     /**
      * Fill in a customer already on file.
@@ -101,12 +118,24 @@ export default function OrderAdd({ items, transactionTypes }: OrderAddProps) {
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
 
+        if (isLocked) {
+            return;
+        }
+
+        if (isEditing) {
+            // Correcting rebuilds the sale server-side and redirects to the
+            // list, so there is nothing to reset here.
+            patch(`/orders/update/${order.id}`, { preserveScroll: true });
+
+            return;
+        }
+
         post('/orders', { preserveScroll: true });
     };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Record a sale" />
+            <Head title={isEditing ? 'Edit sale' : 'Record a sale'} />
 
             <div className="px-4 py-6">
                 <Button variant="outline" asChild className="mb-10 shrink-0 self-start">
@@ -115,6 +144,24 @@ export default function OrderAdd({ items, transactionTypes }: OrderAddProps) {
                         Back to Orders
                     </Link>
                 </Button>
+
+                {/* A correction rewrites stock and payment, so it is worth
+                    saying what saving will actually do. */}
+                {isEditing && !isLocked && (
+                    <div className="mb-6 rounded-md border border-dashed px-4 py-3">
+                        <p className="text-sm font-medium">Correcting a recorded sale</p>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                            The stock this sale moved is returned and re-applied from the corrected figures.
+                        </p>
+                    </div>
+                )}
+
+                {isLocked && (
+                    <div className="border-destructive/50 bg-destructive/5 mb-6 rounded-md border px-4 py-3">
+                        <p className="text-sm font-medium">This sale can no longer be corrected</p>
+                        <p className="text-muted-foreground mt-1 text-sm">{blockedReason}</p>
+                    </div>
+                )}
 
                 <div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,50rem)_minmax(0,1fr)]">
                     <form onSubmit={submit} className="space-y-6">
@@ -271,7 +318,17 @@ export default function OrderAdd({ items, transactionTypes }: OrderAddProps) {
                             <InputError message={errors.occurred_at} />
                         </div>
 
-                        <Button disabled={processing || total <= 0}>Record sale</Button>
+                        <div className="flex items-center gap-3">
+                            <Button disabled={processing || total <= 0 || isLocked}>
+                                {isEditing ? 'Save correction' : 'Record sale'}
+                            </Button>
+
+                            {isEditing && (
+                                <Button variant="secondary" className="px-6" asChild>
+                                    <Link href="/orders">Cancel</Link>
+                                </Button>
+                            )}
+                        </div>
                     </form>
                 </div>
             </div>

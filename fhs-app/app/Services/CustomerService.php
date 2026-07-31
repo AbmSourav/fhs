@@ -58,8 +58,8 @@ class CustomerService
     public function rules(Customer $customer): array
     {
         return [
-            'name'    => ['required', 'string', 'max:255'],
-            'address' => ['nullable', 'string', 'max:1000'],
+            'name'          => ['required', 'string', 'max:255'],
+            'address'       => ['nullable', 'string', 'max:1000'],
             'mobile_number' => [
                 'nullable',
                 'string',
@@ -91,7 +91,7 @@ class CustomerService
         $address = trim((string) ($data['address'] ?? ''));
 
         $customer->update([
-            'name' => trim($data['name']),
+            'name'          => trim($data['name']),
             'mobile_number' => $mobile !== '' ? $mobile : null,
             'address'       => $address !== '' ? $address : null,
         ]);

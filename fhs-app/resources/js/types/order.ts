@@ -7,6 +7,8 @@
 export interface Order {
     id: number;
     occurred_at: string;
+    /** False once a fully paid sale has passed its correction window. */
+    is_editable: boolean;
     customer: OrderCustomer;
     total_amount: number;
     paid_amount: number;
@@ -31,6 +33,9 @@ export interface OrderLine {
     returned_name: string | null;
     quantity: number;
     unit_price: number;
+    /** Set only when the shell and gas were priced separately. */
+    cylinder_price: number | null;
+    gas_price: number | null;
     line_total: number;
 }
 
@@ -48,6 +53,35 @@ export interface TransactionTypeOption {
     label: string;
     /** Whether the customer hands a shell back, which allows a cross-brand swap. */
     returns_shell: boolean;
+    /** Whether the customer keeps the shell, so it is priced apart from the gas. */
+    sells_shell: boolean;
+}
+
+/**
+ * An existing sale in the shape the add/edit form uses.
+ *
+ * Amounts are strings because they populate text inputs; the server casts them
+ * back on submit.
+ */
+export interface OrderFormValues {
+    id: number;
+    mobile_number: string;
+    customer_name: string;
+    address: string;
+    occurred_at: string;
+    items: OrderFormLine[];
+    is_paid: boolean;
+    amount_paid: string;
+    payment_method: string;
+}
+
+export interface OrderFormLine {
+    catalogue_id: string;
+    transaction_type: string;
+    /** Empty unless the customer handed back a different brand. */
+    returned_catalogue_id: string;
+    quantity: string;
+    unit_price: string;
 }
 
 /** An existing customer found by mobile number while filling in the form. */

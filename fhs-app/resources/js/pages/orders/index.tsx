@@ -48,9 +48,6 @@ export default function OrdersIndex({ orders }: { orders: Paginated<Order> }) {
                     </div>
                 ) : (
                     <>
-                        {/* items-start: grid items stretch to the tallest in
-                            their row by default, so opening one card's accordion
-                            would grow the collapsed ones beside it. */}
                         <ul className="mt-6 grid items-start gap-2 sm:grid-cols-2 xl:grid-cols-3">
                             {orders.data.map((order) => (
                                 <OrderCard key={order.id} order={order} />

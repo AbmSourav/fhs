@@ -118,4 +118,46 @@ class Order extends Model
     {
         return $this->paymentState() === 'paid';
     }
+
+    /**
+     * How long a settled sale stays editable.
+     *
+     * A paid order is a closed transaction: the money is in and the customer
+     * has gone. The window is only there to catch a mistake noticed straight
+     * away. An unpaid one is still live, so it stays open indefinitely.
+     */
+    public const PAID_EDIT_WINDOW_HOURS = 1;
+
+    /**
+     * Can this sale still be corrected?
+     *
+     * Paid orders close after an hour; anything still owed stays open, since
+     * the balance is unsettled and may legitimately need fixing.
+     */
+    public function isEditable(): bool
+    {
+        return $this->editBlockedReason() === null;
+    }
+
+    /**
+     * Why this sale cannot be corrected, or null when it can be.
+     *
+     * Returned rather than thrown so one wording serves both the server
+     * rejection and the disabled state in the UI.
+     */
+    public function editBlockedReason(): ?string
+    {
+        if (! $this->isFullyPaid()) {
+            return null;
+        }
+
+        if ($this->created_at->addHours(static::PAID_EDIT_WINDOW_HOURS)->isFuture()) {
+            return null;
+        }
+
+        return sprintf(
+            'A fully paid sale can only be corrected within %d hour of being recorded.',
+            static::PAID_EDIT_WINDOW_HOURS,
+        );
+    }
 }

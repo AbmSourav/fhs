@@ -43,6 +43,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('orders/add', [OrderController::class, 'create'])->name('orders.create');
         Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
+        Route::get('orders/edit/{order}', [OrderController::class, 'edit'])->name('orders.edit');
+        Route::patch('orders/update/{order}', [OrderController::class, 'update'])->name('orders.update');
         // Called while the form is open, so it answers with JSON rather than a
         // full Inertia page.
         Route::get('orders/customer-lookup', [OrderController::class, 'lookupCustomer'])

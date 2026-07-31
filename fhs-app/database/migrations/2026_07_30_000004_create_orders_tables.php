@@ -59,6 +59,12 @@ return new class extends Migration
             // Both frozen at sale time. Joining to current values would let a
             // later price or cost change silently rewrite historical orders.
             $table->decimal('unit_price', 14, 2);
+
+            // How much of unit_price was the shell rather than the gas, when a
+            // customer buys a cylinder outright and is charged for both at
+            // once. Gas is the remainder. Null on every other kind of sale,
+            // where no shell is being sold.
+            $table->decimal('cylinder_price', 14, 2)->nullable();
             $table->decimal('unit_cost', 14, 2)->default(0)->comment('weighted average at sale time');
             $table->decimal('line_total', 14, 2);
             $table->timestamps();

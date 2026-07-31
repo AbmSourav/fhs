@@ -157,7 +157,7 @@ class CustomerListTest extends TestCase
         $this->assertNull($row['last_ordered_at']);
     }
 
-    public function test_customers_paginate_twelve_to_a_page(): void
+    public function test_customers_paginate_ten_to_a_page(): void
     {
         foreach (range(1, 14) as $n) {
             $this->sellTo('017000000'.str_pad((string) $n, 2, '0', STR_PAD_LEFT), "Customer {$n}", 1400);
@@ -166,7 +166,7 @@ class CustomerListTest extends TestCase
         $page = $this->customers->paginate();
 
         $this->assertSame(14, $page->total());
-        $this->assertCount(12, $page->items());
+        $this->assertCount(10, $page->items());
     }
 
     public function test_the_address_is_carried_for_delivery(): void

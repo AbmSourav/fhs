@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Order;
 use App\Services\OrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -42,6 +43,34 @@ class OrderController extends Controller
 
         return to_route('orders.index')
             ->with('success', "Sale recorded for {$order->customer->name}.");
+    }
+
+    /** The same form as create(), pre-filled with an existing sale. */
+    public function edit(Order $order): Response
+    {
+        $order->load(['customer', 'items', 'payments']);
+
+        return Inertia::render('orders/add', [
+            'items'            => $this->orders->sellableItems(),
+            'transactionTypes' => $this->orders->transactionTypes(),
+            'order'            => $this->orders->presentForForm($order),
+            // A stale link still opens the form, but read-only with the reason
+            // shown, rather than 404ing on a sale that plainly exists.
+            'blockedReason' => $order->editBlockedReason(),
+        ]);
+    }
+
+    public function update(Request $request, Order $order): RedirectResponse
+    {
+        $data = $request->validate(
+            $this->orders->rules(),
+            $this->orders->messages(),
+        );
+
+        $updated = $this->orders->update($order, $data, $request->user()->id);
+
+        return to_route('orders.index')
+            ->with('success', "Sale updated for {$updated->customer->name}.");
     }
 
     /**

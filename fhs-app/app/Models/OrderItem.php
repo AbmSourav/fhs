@@ -29,6 +29,7 @@ class OrderItem extends Model
         'transaction_type',
         'quantity',
         'unit_price',
+        'cylinder_price',
         'unit_cost',
         'line_total',
     ];
@@ -39,6 +40,7 @@ class OrderItem extends Model
             'transaction_type' => TransactionType::class,
             'quantity'         => 'integer',
             'unit_price'       => 'decimal:2',
+            'cylinder_price'   => 'decimal:2',
             'unit_cost'        => 'decimal:2',
             'line_total'       => 'decimal:2',
         ];
@@ -92,6 +94,28 @@ class OrderItem extends Model
     public function returnedCatalogueItem(): BelongsTo
     {
         return $this->belongsTo(Catalogue::class, 'returned_catalogue_id');
+    }
+
+    /**
+     * Was the shell priced separately from the gas?
+     *
+     * Only an outright cylinder purchase charges for both at once; a swap sells
+     * gas alone and a bare shell sale has no gas to price.
+     */
+    public function hasPriceSplit(): bool
+    {
+        return $this->cylinder_price !== null && $this->transaction_type->includesShell();
+    }
+
+    /**
+     * What the gas was charged at, per unit.
+     *
+     * unit_price is the two entered prices added together, so the gas share is
+     * whatever is left once the shell is taken out.
+     */
+    public function gasPrice(): float
+    {
+        return round((float) $this->unit_price - (float) $this->cylinder_price, 2);
     }
 
     /** Margin on this line, using the cost frozen at sale time. */

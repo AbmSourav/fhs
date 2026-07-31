@@ -11,7 +11,10 @@ export interface OrderLineValues {
     transaction_type: string;
     returned_catalogue_id: string;
     quantity: string;
+    /** The gas price when a shell is priced separately, otherwise the whole price. */
     unit_price: string;
+    /** Only entered when the customer buys the cylinder outright. */
+    cylinder_price: string;
 }
 
 interface OrderLineFieldsProps {
@@ -44,10 +47,15 @@ export default function OrderLineFields({
     // back and the product is one that has shells.
     const canReturnShell = Boolean(type?.returns_shell && selected?.is_returnable);
 
+    // Buying a cylinder outright charges for the shell and its gas at once, so
+    // the two are priced separately.
+    const sellsShell = Boolean(type?.sells_shell);
+
     // Only returnable products can come back as empties.
     const returnableItems = items.filter((item) => item.is_returnable);
 
-    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unit_price) || 0);
+    const unitPrice = (Number(line.unit_price) || 0) + (sellsShell ? Number(line.cylinder_price) || 0 : 0);
+    const lineTotal = (Number(line.quantity) || 0) * unitPrice;
 
     return (
         <li className="rounded-md border p-4">
@@ -109,8 +117,10 @@ export default function OrderLineFields({
                     <InputError message={errors[`items.${index}.quantity`]} />
                 </div>
 
+                {/* Buying a cylinder outright charges for the shell and the gas
+                    inside it, so the two are priced separately. */}
                 <div className="grid gap-2">
-                    <Label htmlFor={`unit_price_${index}`}>Price (each)</Label>
+                    <Label htmlFor={`unit_price_${index}`}>{sellsShell ? 'Gas price (each)' : 'Price (each)'}</Label>
                     <Input
                         id={`unit_price_${index}`}
                         type="text"
@@ -120,6 +130,20 @@ export default function OrderLineFields({
                     />
                     <InputError message={errors[`items.${index}.unit_price`]} />
                 </div>
+
+                {sellsShell && (
+                    <div className="grid gap-2">
+                        <Label htmlFor={`cylinder_price_${index}`}>Cylinder price (each)</Label>
+                        <Input
+                            id={`cylinder_price_${index}`}
+                            type="text"
+                            value={line.cylinder_price}
+                            onChange={(e) => onChange(index, 'cylinder_price', e.target.value)}
+                            placeholder="0.00"
+                        />
+                        <InputError message={errors[`items.${index}.cylinder_price`]} />
+                    </div>
+                )}
 
                 {/* A customer may hand back another brand's empty. The shell
                     lands on that brand's stock, not the one sold. */}

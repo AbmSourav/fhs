@@ -46,6 +46,10 @@ class OrderService
             'items.*.transaction_type' => ['required', Rule::enum(TransactionType::class)],
             'items.*.quantity'         => ['required', 'integer', 'min:1', 'max:100000'],
             'items.*.unit_price'       => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            // Buying a cylinder outright charges for the shell and the gas at
+            // once, so the two are entered separately and unit_price carries
+            // the gas share. Absent on every other kind of sale.
+            'items.*.cylinder_price' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             // Set only when the customer handed back a different product than
             // the one sold — a cross-brand swap.
             'items.*.returned_catalogue_id' => ['nullable', 'integer', 'exists:catalogue,id'],
@@ -108,6 +112,67 @@ class OrderService
     }
 
     /**
+     * Correct a recorded sale.
+     *
+     * The order keeps its identity, but its lines and stock movements are
+     * rebuilt: the old movements are reversed and new ones written, so stock
+     * reflects only the corrected figures while the ledger still shows both the
+     * mistake and the fix.
+     *
+     * @throws ValidationException
+     */
+    public function update(Order $order, array $data, int $recordedBy): Order
+    {
+        // Re-checked here rather than trusting the controller: this is the only
+        // path that can rewrite stock and money, so the rule belongs at the
+        // write.
+        if ($reason = $order->editBlockedReason()) {
+            throw ValidationException::withMessages(['items' => $reason]);
+        }
+
+        return DB::transaction(function () use ($order, $data, $recordedBy) {
+            $name = trim((string) ($data['customer_name'] ?? ''));
+
+            $customer = Customer::findOrCreateForSale($data['mobile_number'] ?? null, [
+                'name'    => $name !== '' ? $name : 'Walk-in customer',
+                'address' => $data['address'] ?? null,
+            ]);
+
+            // Reverse every movement this order caused, then delete the lines.
+            // The movements stay as history; the lines do not, because they are
+            // about to be rewritten and an order item has no meaning once its
+            // order no longer claims it.
+            foreach ($order->movements as $movement) {
+                $movement->reverse('Superseded by a correction');
+            }
+
+            $order->items()->delete();
+
+            $order->update([
+                'customer_id' => $customer->id,
+                'occurred_at' => $data['occurred_at'],
+            ]);
+
+            // Relations were loaded before the delete, so they must be dropped
+            // or addLine would append to a stale collection.
+            $order->refresh();
+
+            foreach ($data['items'] as $line) {
+                $this->addLine($order, $line);
+            }
+
+            $order->recalculateTotal();
+
+            // Payments are replaced rather than adjusted: the form states what
+            // was received in total, not what changed.
+            $order->payments()->delete();
+            $this->recordPayment($order->fresh(), $data, $recordedBy);
+
+            return $order->fresh(['customer', 'items']);
+        });
+    }
+
+    /**
      * Add one product to an order, with the stock movements it causes.
      *
      * @throws ValidationException
@@ -120,7 +185,17 @@ class OrderService
         $returnedId = $this->resolveReturnedItem($item, $type, $line);
 
         $quantity = (int) $line['quantity'];
-        $unitPrice = (float) $line['unit_price'];
+        $gasPrice = (float) $line['unit_price'];
+
+        // Only an outright cylinder purchase prices the shell separately; on
+        // anything else a cylinder price would describe nothing.
+        $cylinderPrice = $type->includesShell() && isset($line['cylinder_price'])
+            ? (float) $line['cylinder_price']
+            : null;
+
+        // unit_price is what the customer pays per unit, so the two entered
+        // prices are added rather than stored apart from each other.
+        $unitPrice = round($gasPrice + (float) $cylinderPrice, 2);
 
         $orderItem = OrderItem::create([
             'order_id'              => $order->id,
@@ -129,6 +204,7 @@ class OrderService
             'transaction_type'      => $type,
             'quantity'              => $quantity,
             'unit_price'            => $unitPrice,
+            'cylinder_price'        => $cylinderPrice,
             // Weighted-average cost at sale time. Frozen here so a later price
             // change cannot rewrite this order's margin.
             'unit_cost'  => $this->costBasisFor($item, $type),
@@ -290,7 +366,12 @@ class OrderService
         return [
             'id'          => $order->id,
             'occurred_at' => $order->occurred_at,
-            'customer'    => [
+            // A paid sale closes after an hour; an unpaid one stays open.
+            // Derived from the loaded sum rather than calling isEditable(),
+            // which would query payments once per row.
+            'is_editable' => $paid < $total
+                || $order->created_at->addHours(Order::PAID_EDIT_WINDOW_HOURS)->isFuture(),
+            'customer' => [
                 'id'            => $order->customer->id,
                 'name'          => $order->customer->name,
                 'mobile_number' => $order->customer->mobile_number,
@@ -317,9 +398,68 @@ class OrderService
                         : null,
                 'quantity'   => $item->quantity,
                 'unit_price' => (float) $item->unit_price,
-                'line_total' => (float) $item->line_total,
+                // Set only when the shell and gas were priced separately, so
+                // the card can show what each part was charged at.
+                'cylinder_price' => $item->hasPriceSplit() ? (float) $item->cylinder_price : null,
+                'gas_price'      => $item->hasPriceSplit() ? $item->gasPrice() : null,
+                'line_total'     => (float) $item->line_total,
             ])->all(),
         ];
+    }
+
+    /**
+     * A recorded sale in the shape the add/edit form expects.
+     *
+     * Field names match the form's, so the same component serves both — the
+     * only difference is whether the values start empty.
+     *
+     * @return array<string, mixed>
+     */
+    public function presentForForm(Order $order): array
+    {
+        $paid = $order->paidAmount();
+
+        return [
+            'id'            => $order->id,
+            'mobile_number' => $order->customer->mobile_number ?? '',
+            'customer_name' => $order->customer->name,
+            'address'       => $order->customer->address ?? '',
+            'occurred_at'   => $order->occurred_at->toDateString(),
+            'items'         => $order->items->map(fn (OrderItem $item) => [
+                'catalogue_id'     => (string) $item->catalogue_id,
+                'transaction_type' => $item->transaction_type->value,
+                // Empty unless the customer handed back another brand, which
+                // is what the form's picker treats as "same as sold".
+                'returned_catalogue_id' => $item->returned_catalogue_id !== null
+                    && $item->returned_catalogue_id !== $item->catalogue_id
+                        ? (string) $item->returned_catalogue_id
+                        : '',
+                'quantity' => (string) $item->quantity,
+                // The form's price field holds the gas share when the shell is
+                // priced separately, matching how the two are entered.
+                'unit_price' => $this->formatAmount(
+                    $item->hasPriceSplit() ? $item->gasPrice() : $item->unit_price,
+                ),
+                'cylinder_price' => $item->hasPriceSplit()
+                    ? $this->formatAmount($item->cylinder_price)
+                    : '',
+            ])->all(),
+            'is_paid'        => $order->isFullyPaid(),
+            'amount_paid'    => $paid > 0 ? $this->formatAmount($paid) : '',
+            'payment_method' => $order->payments->first()?->method->value
+                ?? PaymentMethod::Cash->value,
+        ];
+    }
+
+    /**
+     * An amount as the form should show it.
+     *
+     * Trailing zeros are only stripped from the fractional part — trimming the
+     * string outright would turn 1200 into 12.
+     */
+    private function formatAmount(mixed $value): string
+    {
+        return rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.');
     }
 
     /** Products that can be sold, with what the form needs to shape each line. */
@@ -346,6 +486,9 @@ class OrderService
                 'value'         => $type->value,
                 'label'         => $type->label(),
                 'returns_shell' => $type->stockChangePerUnit()['empty'] > 0,
+                // The customer keeps the shell, so it is priced separately
+                // from the gas inside it.
+                'sells_shell' => $type->includesShell(),
             ],
             TransactionType::cases(),
         );
