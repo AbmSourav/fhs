@@ -47,9 +47,9 @@ class InventoryService
             // this is a swap at all — null means cylinders were bought.
             'swap_catalogue_id' => ['nullable', 'integer', 'exists:catalogue,id'],
             'filled_quantity'   => ['nullable', 'integer', 'min:0', 'max:1000000'],
-            'empty_quantity'  => ['nullable', 'integer', 'min:0', 'max:1000000'],
-            'shell_unit_cost' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
-            'gas_unit_cost'   => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'empty_quantity'    => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'shell_unit_cost'   => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'gas_unit_cost'     => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
 
             // Plain goods: one quantity, one cost.
             'quantity'  => ['nullable', 'integer', 'min:1', 'max:1000000'],
@@ -351,13 +351,13 @@ class InventoryService
         $kind = $purchase->catalogueItem->type->value;
 
         return [
-            'key'          => "{$kind}-{$purchase->id}",
-            'kind'         => $kind,
-            'display_name' => $purchase->catalogueItem->displayName(),
-            'catalogue'    => $this->presentCatalogueItem($purchase->catalogueItem),
-            'supplier'     => $purchase->supplier,
-            'invoice_ref'  => $purchase->invoice_ref,
-            'purchased_at' => $purchase->purchased_at,
+            'key'             => "{$kind}-{$purchase->id}",
+            'kind'            => $kind,
+            'display_name'    => $purchase->catalogueItem->displayName(),
+            'catalogue'       => $this->presentCatalogueItem($purchase->catalogueItem),
+            'supplier'        => $purchase->supplier,
+            'invoice_ref'     => $purchase->invoice_ref,
+            'purchased_at'    => $purchase->purchased_at,
             'is_refill'       => false,
             'swapped_for'     => null,
             'filled_quantity' => $purchase->quantity,

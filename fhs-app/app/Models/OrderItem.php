@@ -121,7 +121,7 @@ class OrderItem extends Model
         $perUnit = $this->transaction_type->stockChangePerUnit();
 
         $filled = $perUnit['filled'] * $this->quantity;
-        $empty  = $perUnit['empty'] * $this->quantity;
+        $empty = $perUnit['empty'] * $this->quantity;
 
         // Same product on both sides: one entry, both changes together.
         if ($this->returned_catalogue_id === null || $this->returned_catalogue_id === $this->catalogue_id) {

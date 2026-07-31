@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasEditHistory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,9 +18,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class GasInventoryPurchase extends Model
 {
-    use HasFactory;
+    use HasEditHistory, HasFactory;
 
     protected $fillable = [
+        'canonical_id',
         'catalogue_id',
         'swap_catalogue_id',
         'supplier',

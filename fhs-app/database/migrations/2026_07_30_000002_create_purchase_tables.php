@@ -17,6 +17,13 @@ return new class extends Migration
     {
         Schema::create('gas_inventory_purchases', function (Blueprint $table) {
             $table->id();
+
+            // Purchases are immutable: an edit appends a replacement row rather
+            // than rewriting this one, so a correction today cannot silently
+            // change last month's stock or margin. canonical_id is the first row
+            // in the chain — null on that first row, since it cannot reference
+            // itself before it has an id.
+            $table->foreignId('canonical_id')->nullable()->constrained('gas_inventory_purchases');
             $table->foreignId('catalogue_id')->constrained('catalogue')->comment('what came back filled');
 
             // Whose empties were sent, and so whether this is a swap at all:
@@ -59,6 +66,8 @@ return new class extends Migration
         // Plain goods: one quantity, one cost, no shells, no refills.
         Schema::create('inventory_purchases', function (Blueprint $table) {
             $table->id();
+            // See gas_inventory_purchases above: edits append, never rewrite.
+            $table->foreignId('canonical_id')->nullable()->constrained('inventory_purchases');
             $table->foreignId('catalogue_id')->constrained('catalogue');
             $table->string('supplier')->nullable();
             $table->integer('quantity');
