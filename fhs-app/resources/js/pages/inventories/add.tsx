@@ -6,15 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { type PurchasableItem } from '@/types/inventory';
+import { type PurchasableItem, type PurchaseFormValues } from '@/types/inventory';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
 import { FormEventHandler } from 'react';
-
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Inventory', href: '/inventories' },
-    { title: 'Add', href: '/inventories/add' },
-];
 
 /** Today in the `yyyy-mm-dd` shape a date input expects, in local time. */
 function today(): string {
@@ -23,25 +18,42 @@ function today(): string {
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
-    const { data, setData, post, errors, processing, reset } = useForm({
-        catalogue_id: '',
-        supplier: '',
-        invoice_ref: '',
-        purchased_at: today(),
+interface InventoryFormProps {
+    items: PurchasableItem[];
+    /** Absent when adding; present when correcting an existing purchase. */
+    purchase?: PurchaseFormValues;
+    /** Which purchase table the record belongs to. Edit mode only. */
+    kind?: string;
+    /** Why this purchase can no longer be edited, when it cannot. */
+    blockedReason?: string | null;
+}
+
+export default function InventoryForm({ items, purchase, kind, blockedReason }: InventoryFormProps) {
+    const isEditing = purchase !== undefined;
+
+    const { data, setData, post, patch, errors, processing, reset } = useForm({
+        catalogue_id: purchase?.catalogue_id ?? '',
+        supplier: purchase?.supplier ?? '',
+        invoice_ref: purchase?.invoice_ref ?? '',
+        purchased_at: purchase?.purchased_at ?? today(),
         // Whose empties were sent. Empty means cylinders were bought outright;
         // set to the same product for a like-for-like swap, or another product
         // when the supplier took a different brand back.
-        swap_catalogue_id: '',
-        filled_quantity: '',
-        empty_quantity: '',
-        shell_unit_cost: '',
-        gas_unit_cost: '',
-        quantity: '',
-        unit_cost: '',
-        transport_cost: '',
-        other_cost: '',
+        swap_catalogue_id: purchase?.swap_catalogue_id ?? '',
+        filled_quantity: purchase?.filled_quantity ?? '',
+        empty_quantity: purchase?.empty_quantity ?? '',
+        shell_unit_cost: purchase?.shell_unit_cost ?? '',
+        gas_unit_cost: purchase?.gas_unit_cost ?? '',
+        quantity: purchase?.quantity ?? '',
+        unit_cost: purchase?.unit_cost ?? '',
+        transport_cost: purchase?.transport_cost ?? '',
+        other_cost: purchase?.other_cost ?? '',
     });
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'Inventory', href: '/inventories' },
+        isEditing ? { title: 'Edit', href: '#' } : { title: 'Add', href: '/inventories/add' },
+    ];
 
     // Which half of the form applies is a fact about the product, so it is read
     // from the chosen item rather than asked separately.
@@ -56,8 +68,22 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
     // is the common case; the picker below changes it to another brand.
     const toggleSwap = (isSwap: boolean) => setData('swap_catalogue_id', isSwap ? data.catalogue_id : '');
 
+    const isLocked = Boolean(blockedReason);
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
+
+        if (isLocked) {
+            return;
+        }
+
+        if (isEditing) {
+            // An edit appends a replacement row server-side and redirects to
+            // the list, so there is nothing to reset here.
+            patch(`/inventories/update/${kind}/${purchase.id}`, { preserveScroll: true });
+
+            return;
+        }
 
         post('/inventories', {
             preserveScroll: true,
@@ -79,7 +105,7 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Add inventory" />
+            <Head title={isEditing ? 'Edit inventory' : 'Add inventory'} />
 
             <div className="px-4 py-6">
                 <Button variant="outline" asChild className="mb-10 shrink-0 self-start">
@@ -88,6 +114,25 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
                         Back to Inventory
                     </Link>
                 </Button>
+
+                {/* Corrections append a new record rather than overwriting, so
+                    it is worth saying what saving will actually do. */}
+                {isEditing && purchase && !isLocked && (
+                    <div className="mb-6 rounded-md border border-dashed px-4 py-3">
+                        <p className="text-sm font-medium">Correcting a recorded purchase</p>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                            The original stays on record and its stock is reversed. {purchase.edits_used} of {purchase.edits_allowed}{' '}
+                            corrections used.
+                        </p>
+                    </div>
+                )}
+
+                {isLocked && (
+                    <div className="border-destructive/50 bg-destructive/5 mb-6 rounded-md border px-4 py-3">
+                        <p className="text-sm font-medium">This purchase can no longer be corrected</p>
+                        <p className="text-muted-foreground mt-1 text-sm">{blockedReason}</p>
+                    </div>
+                )}
 
                 <div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,50rem)_minmax(0,1fr)]">
                     <form onSubmit={submit} className="space-y-6">
@@ -182,7 +227,9 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
                                         value={data.filled_quantity}
                                         onChange={(e) => {
                                             setData('filled_quantity', e.target.value)
-                                            setData('empty_quantity', e.target.value)
+                                            if (data?.swap_catalogue_id) {
+                                                setData('empty_quantity', e.target.value)
+                                            }
                                         }}
                                         placeholder="0"
                                     />
@@ -341,7 +388,17 @@ export default function InventoryAdd({ items }: { items: PurchasableItem[] }) {
                             </div>
                         </div>
 
-                        <Button disabled={processing || !data.catalogue_id}>Record purchase</Button>
+                        <div className="flex items-center gap-3">
+                            <Button disabled={processing || !data.catalogue_id || isLocked}>
+                                {isEditing ? 'Save correction' : 'Record purchase'}
+                            </Button>
+
+                            {isEditing && (
+                                <Button variant="secondary" className="px-6" asChild>
+                                    <Link href="/inventories">Cancel</Link>
+                                </Button>
+                            )}
+                        </div>
                     </form>
                 </div>
             </div>

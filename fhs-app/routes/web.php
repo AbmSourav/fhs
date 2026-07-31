@@ -26,6 +26,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('inventories/add', [InventoryController::class, 'create'])->name('inventories.create');
         Route::post('inventories', [InventoryController::class, 'store'])->name('inventories.store');
 
+        Route::get('inventories/edit/{kind}/{id}', [InventoryController::class, 'edit'])
+            ->whereNumber('id')
+            ->name('inventories.edit');
+
+        Route::patch('inventories/update/{kind}/{id}', [InventoryController::class, 'update'])
+            ->whereNumber('id')
+            ->name('inventories.update');
+
         Route::post('brands', [BrandController::class, 'store'])->name('brands.store');
     });
 });

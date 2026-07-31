@@ -115,13 +115,18 @@ class InventoryMovement extends Model
     public function reverse(string $note): self
     {
         return static::create([
-            'catalogue_id'        => $this->catalogue_id,
-            'order_id'            => $this->order_id,
-            'reason'              => MovementReason::Reversal,
-            'filled_stock_change' => -$this->filled_stock_change,
-            'empty_stock_change'  => -$this->empty_stock_change,
-            'note'                => $note,
-            'occurred_at'         => now(),
+            'catalogue_id' => $this->catalogue_id,
+            // The same source is carried across, so a reversal can still be
+            // traced to what caused it. assertSingleSource() still holds:
+            // exactly one of these was set on the row being reversed.
+            'order_id'                  => $this->order_id,
+            'gas_inventory_purchase_id' => $this->gas_inventory_purchase_id,
+            'inventory_purchase_id'     => $this->inventory_purchase_id,
+            'reason'                    => MovementReason::Reversal,
+            'filled_stock_change'       => -$this->filled_stock_change,
+            'empty_stock_change'        => -$this->empty_stock_change,
+            'note'                      => $note,
+            'occurred_at'               => now(),
         ]);
     }
 }

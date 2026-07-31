@@ -7,8 +7,13 @@
 export interface InventoryPurchase {
     /** Unique across both tables — the ids alone collide. */
     key: string;
+    id: number;
     /** The product's `InventoryType`, e.g. `lpg_cylinder`. */
     kind: string;
+    /** False once the edit window has closed or the correction limit is reached. */
+    is_editable: boolean;
+    /** When this record was last corrected, or null if never. */
+    edited_at: string | null;
     display_name: string;
     /** The product bought — kept even after it leaves the catalogue. */
     catalogue: PurchaseCatalogue;
@@ -42,6 +47,34 @@ export interface PurchaseCatalogue {
     weight: number;
     is_gas: boolean;
     is_returnable: boolean;
+}
+
+/**
+ * An existing purchase in the shape the add/edit form uses.
+ *
+ * Every field is a string because they populate text inputs; the server casts
+ * them back. Fields that do not apply to the purchase's kind come back empty.
+ */
+export interface PurchaseFormValues {
+    id: number;
+    catalogue_id: string;
+    supplier: string;
+    invoice_ref: string;
+    purchased_at: string;
+    swap_catalogue_id: string;
+    filled_quantity: string;
+    empty_quantity: string;
+    shell_unit_cost: string;
+    gas_unit_cost: string;
+    quantity: string;
+    unit_cost: string;
+    transport_cost: string;
+    other_cost: string;
+    /** Corrections already made, against the limit. */
+    edits_used: number;
+    edits_allowed: number;
+    /** When the edit window closes. */
+    editable_until: string;
 }
 
 /** A catalogue item in the purchase picker. */

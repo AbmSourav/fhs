@@ -1,7 +1,9 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { type InventoryPurchase } from '@/types/inventory';
-import { RotateCcw } from 'lucide-react';
+import { Link } from '@inertiajs/react';
+import { Pencil, RotateCcw } from 'lucide-react';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
 const currency = new Intl.NumberFormat('en-BD', {
@@ -19,6 +21,17 @@ const date = new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',
 });
 
+// A correction happens at a moment, unlike purchased_at which is a date the
+// user picks — so this one carries the time as well.
+const dateTime = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+});
+
 /** A single recorded purchase. */
 export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase }) {
     const { catalogue } = purchase;
@@ -27,7 +40,7 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
     const productDetail = [catalogue.type_label, `${catalogue.weight}kg`].filter(Boolean).join(' · ');
 
     return (
-        <li className="rounded-lg border py-2 px-3">
+        <li className="rounded-lg border-2 py-2 px-3">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="truncate font-medium">{title}</p>
@@ -122,6 +135,21 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
                                 </span>
                             </p>
                         )}
+
+                        <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
+                            <p className="text-muted-foreground text-xs">
+                                {purchase.edited_at ? `Updated: ${dateTime.format(new Date(purchase.edited_at))}` : ''}
+                            </p>
+
+                            {purchase.is_editable && (
+                                <Button variant="outline" className="p-2 h-7 gap-1" size="sm" asChild>
+                                    <Link href={`/inventories/edit/${purchase.kind}/${purchase.id}`}>
+                                        <Pencil className="size-3" />
+                                        Edit
+                                    </Link>
+                                </Button>
+                            )}
+                        </div>
                     </AccordionContent>
                 </AccordionItem>
             </Accordion>
