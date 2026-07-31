@@ -48,7 +48,10 @@ export default function InventoriesIndex({ purchases }: { purchases: Paginated<I
                     </div>
                 ) : (
                     <>
-                        <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {/* items-start: grid items stretch to the tallest in
+                            their row by default, so opening one card's accordion
+                            would grow the collapsed ones beside it. */}
+                        <ul className="mt-6 grid items-start gap-2 sm:grid-cols-2 xl:grid-cols-3">
                             {purchases.data.map((purchase) => (
                                 <PurchaseCard key={purchase.key} purchase={purchase} />
                             ))}

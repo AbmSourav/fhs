@@ -27,11 +27,11 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
     const productDetail = [catalogue.type_label, `${catalogue.weight}kg`].filter(Boolean).join(' · ');
 
     return (
-        <li className="rounded-lg border p-4">
+        <li className="rounded-lg border py-2 px-3">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="truncate font-medium">{title}</p>
-                    <p className="text-muted-foreground mt-0.5 truncate text-sm">{productDetail}</p>
+                    <p className="text-muted-foreground mt-0.5 truncate text-xs">{productDetail}</p>
                     <p className="text-muted-foreground mt-0.5 text-xs">{date.format(new Date(purchase.purchased_at))}</p>
                 </div>
 
