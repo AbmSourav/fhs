@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\CatalogueController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,10 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('inventories/update/{kind}/{id}', [InventoryController::class, 'update'])
             ->whereNumber('id')
             ->name('inventories.update');
+
+        Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
+        Route::get('customers/edit/{customer}', [CustomerController::class, 'edit'])->name('customers.edit');
+        Route::patch('customers/update/{customer}', [CustomerController::class, 'update'])->name('customers.update');
 
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('orders/add', [OrderController::class, 'create'])->name('orders.create');

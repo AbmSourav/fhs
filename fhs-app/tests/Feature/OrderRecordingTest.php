@@ -7,6 +7,7 @@ use App\Enums\TransactionType;
 use App\Models\Brand;
 use App\Models\Catalogue;
 use App\Models\Customer;
+use App\Models\Order;
 use App\Models\User;
 use App\Services\InventoryService;
 use App\Services\OrderService;
@@ -48,10 +49,10 @@ class OrderRecordingTest extends TestCase
         ]);
 
         return Catalogue::create([
-            'type' => 'lpg_cylinder',
-            'brand_id' => $brand->id,
-            'weight' => 12.5,
-            'is_gas' => true,
+            'type'          => 'lpg_cylinder',
+            'brand_id'      => $brand->id,
+            'weight'        => 12.5,
+            'is_gas'        => true,
             'is_returnable' => true,
         ]);
     }
@@ -60,12 +61,12 @@ class OrderRecordingTest extends TestCase
     private function stockUp(Catalogue $item): void
     {
         $this->inventory->record([
-            'catalogue_id' => $item->id,
-            'purchased_at' => now()->subDays(2)->toDateString(),
+            'catalogue_id'    => $item->id,
+            'purchased_at'    => now()->subDays(2)->toDateString(),
             'filled_quantity' => 20,
-            'empty_quantity' => 10,
+            'empty_quantity'  => 10,
             'shell_unit_cost' => 900,
-            'gas_unit_cost' => 340,
+            'gas_unit_cost'   => 340,
         ], $this->user->id);
     }
 
@@ -75,14 +76,14 @@ class OrderRecordingTest extends TestCase
     }
 
     /** @param  array<int, array<string, mixed>>  $items */
-    private function sell(array $items, array $overrides = []): \App\Models\Order
+    private function sell(array $items, array $overrides = []): Order
     {
         return $this->orders->record([
             'mobile_number' => '01711111111',
             'customer_name' => 'Rahim',
-            'occurred_at' => now()->toDateString(),
-            'items' => $items,
-            'is_paid' => true,
+            'occurred_at'   => now()->toDateString(),
+            'items'         => $items,
+            'is_paid'       => true,
             ...$overrides,
         ], $this->user->id);
     }
@@ -93,10 +94,10 @@ class OrderRecordingTest extends TestCase
         $this->stockUp($jamuna);
 
         $order = $this->sell([[
-            'catalogue_id' => $jamuna->id,
+            'catalogue_id'     => $jamuna->id,
             'transaction_type' => 'swap',
-            'quantity' => 2,
-            'unit_price' => 1400,
+            'quantity'         => 2,
+            'unit_price'       => 1400,
         ]]);
 
         $stock = $this->stockOf($jamuna);
@@ -115,10 +116,10 @@ class OrderRecordingTest extends TestCase
         $this->stockUp($jamuna);
 
         $order = $this->sell([[
-            'catalogue_id' => $jamuna->id,
+            'catalogue_id'     => $jamuna->id,
             'transaction_type' => 'swap',
-            'quantity' => 1,
-            'unit_price' => 1400,
+            'quantity'         => 1,
+            'unit_price'       => 1400,
         ]]);
 
         // Blending the shell in would overstate the cost of the most common
@@ -132,10 +133,10 @@ class OrderRecordingTest extends TestCase
         $this->stockUp($jamuna);
 
         $order = $this->sell([[
-            'catalogue_id' => $jamuna->id,
+            'catalogue_id'     => $jamuna->id,
             'transaction_type' => 'buy_with_gas',
-            'quantity' => 1,
-            'unit_price' => 3000,
+            'quantity'         => 1,
+            'unit_price'       => 3000,
         ]]);
 
         $stock = $this->stockOf($jamuna);
@@ -152,10 +153,10 @@ class OrderRecordingTest extends TestCase
         $this->stockUp($jamuna);
 
         $order = $this->sell([[
-            'catalogue_id' => $jamuna->id,
+            'catalogue_id'     => $jamuna->id,
             'transaction_type' => 'buy_empty',
-            'quantity' => 2,
-            'unit_price' => 1000,
+            'quantity'         => 2,
+            'unit_price'       => 1000,
         ]]);
 
         $stock = $this->stockOf($jamuna);
@@ -177,9 +178,9 @@ class OrderRecordingTest extends TestCase
             'catalogue_id' => $bashundhara->id,
             // The customer handed back another brand's empty.
             'returned_catalogue_id' => $jamuna->id,
-            'transaction_type' => 'swap',
-            'quantity' => 3,
-            'unit_price' => 1450,
+            'transaction_type'      => 'swap',
+            'quantity'              => 3,
+            'unit_price'            => 1450,
         ]]);
 
         $sold = $this->stockOf($bashundhara);
@@ -202,12 +203,12 @@ class OrderRecordingTest extends TestCase
         $this->expectException(ValidationException::class);
 
         $this->sell([[
-            'catalogue_id' => $jamuna->id,
+            'catalogue_id'          => $jamuna->id,
             'returned_catalogue_id' => $bashundhara->id,
             // Buying outright takes no shell back.
             'transaction_type' => 'buy_with_gas',
-            'quantity' => 1,
-            'unit_price' => 3000,
+            'quantity'         => 1,
+            'unit_price'       => 3000,
         ]]);
     }
 
@@ -218,10 +219,10 @@ class OrderRecordingTest extends TestCase
 
         $order = $this->sell(
             [[
-                'catalogue_id' => $jamuna->id,
+                'catalogue_id'     => $jamuna->id,
                 'transaction_type' => 'buy_with_gas',
-                'quantity' => 1,
-                'unit_price' => 3000,
+                'quantity'         => 1,
+                'unit_price'       => 3000,
             ]],
             ['is_paid' => false, 'amount_paid' => 1000],
         );
@@ -238,10 +239,10 @@ class OrderRecordingTest extends TestCase
 
         $order = $this->sell(
             [[
-                'catalogue_id' => $jamuna->id,
+                'catalogue_id'     => $jamuna->id,
                 'transaction_type' => 'swap',
-                'quantity' => 1,
-                'unit_price' => 1400,
+                'quantity'         => 1,
+                'unit_price'       => 1400,
             ]],
             ['is_paid' => false, 'amount_paid' => 0],
         );
@@ -259,10 +260,10 @@ class OrderRecordingTest extends TestCase
 
         $order = $this->sell(
             [[
-                'catalogue_id' => $jamuna->id,
+                'catalogue_id'     => $jamuna->id,
                 'transaction_type' => 'swap',
-                'quantity' => 1,
-                'unit_price' => 1400,
+                'quantity'         => 1,
+                'unit_price'       => 1400,
             ]],
             ['payment_method' => 'mobile'],
         );
@@ -296,10 +297,10 @@ class OrderRecordingTest extends TestCase
         foreach ([1000, 0] as $paid) {
             $this->sell(
                 [[
-                    'catalogue_id' => $jamuna->id,
+                    'catalogue_id'     => $jamuna->id,
                     'transaction_type' => 'buy_with_gas',
-                    'quantity' => 1,
-                    'unit_price' => 3000,
+                    'quantity'         => 1,
+                    'unit_price'       => 3000,
                 ]],
                 ['is_paid' => false, 'amount_paid' => $paid],
             );
@@ -320,10 +321,10 @@ class OrderRecordingTest extends TestCase
         foreach (['Rahim', 'Rahim Uddin'] as $name) {
             $this->sell(
                 [[
-                    'catalogue_id' => $jamuna->id,
+                    'catalogue_id'     => $jamuna->id,
                     'transaction_type' => 'swap',
-                    'quantity' => 1,
-                    'unit_price' => 1400,
+                    'quantity'         => 1,
+                    'unit_price'       => 1400,
                 ]],
                 ['customer_name' => $name],
             );
@@ -340,10 +341,10 @@ class OrderRecordingTest extends TestCase
         foreach (['Walk-in One', 'Walk-in Two'] as $name) {
             $this->sell(
                 [[
-                    'catalogue_id' => $jamuna->id,
+                    'catalogue_id'     => $jamuna->id,
                     'transaction_type' => 'swap',
-                    'quantity' => 1,
-                    'unit_price' => 1400,
+                    'quantity'         => 1,
+                    'unit_price'       => 1400,
                 ]],
                 ['mobile_number' => null, 'customer_name' => $name],
             );
@@ -361,10 +362,10 @@ class OrderRecordingTest extends TestCase
 
         $order = $this->sell(
             [[
-                'catalogue_id' => $jamuna->id,
+                'catalogue_id'     => $jamuna->id,
                 'transaction_type' => 'swap',
-                'quantity' => 1,
-                'unit_price' => 1400,
+                'quantity'         => 1,
+                'unit_price'       => 1400,
             ]],
             ['mobile_number' => null, 'customer_name' => ''],
         );
@@ -384,11 +385,11 @@ class OrderRecordingTest extends TestCase
         $this->stockUp($bashundhara);
 
         $this->sell([[
-            'catalogue_id' => $bashundhara->id,
+            'catalogue_id'          => $bashundhara->id,
             'returned_catalogue_id' => $jamuna->id,
-            'transaction_type' => 'swap',
-            'quantity' => 1,
-            'unit_price' => 1450,
+            'transaction_type'      => 'swap',
+            'quantity'              => 1,
+            'unit_price'            => 1450,
         ]]);
 
         $row = $this->orders->paginate()->items()[0];
@@ -403,11 +404,11 @@ class OrderRecordingTest extends TestCase
         $this->stockUp($jamuna);
 
         $this->sell([[
-            'catalogue_id' => $jamuna->id,
+            'catalogue_id'          => $jamuna->id,
             'returned_catalogue_id' => $jamuna->id,
-            'transaction_type' => 'swap',
-            'quantity' => 1,
-            'unit_price' => 1400,
+            'transaction_type'      => 'swap',
+            'quantity'              => 1,
+            'unit_price'            => 1400,
         ]]);
 
         $row = $this->orders->paginate()->items()[0];
@@ -424,15 +425,15 @@ class OrderRecordingTest extends TestCase
         foreach (range(1, 12) as $n) {
             $this->sell(
                 [[
-                    'catalogue_id' => $jamuna->id,
+                    'catalogue_id'     => $jamuna->id,
                     'transaction_type' => 'swap',
-                    'quantity' => 1,
-                    'unit_price' => 1400,
+                    'quantity'         => 1,
+                    'unit_price'       => 1400,
                 ]],
                 [
                     'mobile_number' => "017000000{$n}",
                     'customer_name' => "Customer {$n}",
-                    'occurred_at' => now()->subDays($n)->toDateString(),
+                    'occurred_at'   => now()->subDays($n)->toDateString(),
                 ],
             );
         }
@@ -452,17 +453,17 @@ class OrderRecordingTest extends TestCase
 
         $this->sell(
             [[
-                'catalogue_id' => $jamuna->id,
+                'catalogue_id'     => $jamuna->id,
                 'transaction_type' => 'buy_with_gas',
-                'quantity' => 1,
-                'unit_price' => 3000,
+                'quantity'         => 1,
+                'unit_price'       => 3000,
             ]],
             ['address' => 'Dhaka', 'is_paid' => false, 'amount_paid' => 0],
         );
 
         $this->assertSame([
-            'name' => 'Rahim',
-            'address' => 'Dhaka',
+            'name'                => 'Rahim',
+            'address'             => 'Dhaka',
             'outstanding_balance' => 3000.0,
         ], $this->orders->findCustomerByMobile('01711111111'));
 
@@ -481,11 +482,11 @@ class OrderRecordingTest extends TestCase
                 ['catalogue_id' => $jamuna->id, 'transaction_type' => 'swap', 'quantity' => 1, 'unit_price' => 1400],
                 // Invalid: an outright purchase cannot take a shell back.
                 [
-                    'catalogue_id' => $jamuna->id,
+                    'catalogue_id'          => $jamuna->id,
                     'returned_catalogue_id' => $jamuna->id,
-                    'transaction_type' => 'buy_with_gas',
-                    'quantity' => 1,
-                    'unit_price' => 3000,
+                    'transaction_type'      => 'buy_with_gas',
+                    'quantity'              => 1,
+                    'unit_price'            => 3000,
                 ],
             ]);
         } catch (ValidationException) {
