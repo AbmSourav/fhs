@@ -52,7 +52,7 @@ export default function InventoryForm({ items, purchase, kind, blockedReason }: 
 
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Inventory', href: '/inventories' },
-        isEditing ? { title: 'Edit', href: '#' } : { title: 'Add', href: '/inventories/add' },
+        isEditing ? { title: 'Edit', href: '#' } : { title: 'Purchase', href: '/inventories/add' },
     ];
 
     // Which half of the form applies is a fact about the product, so it is read
@@ -227,7 +227,7 @@ export default function InventoryForm({ items, purchase, kind, blockedReason }: 
                                         value={data.filled_quantity}
                                         onChange={(e) => {
                                             setData('filled_quantity', e.target.value)
-                                            if (data?.swap_catalogue_id) {
+                                            if (isRefill === true) {
                                                 setData('empty_quantity', e.target.value)
                                             }
                                         }}
@@ -242,7 +242,7 @@ export default function InventoryForm({ items, purchase, kind, blockedReason }: 
                                         id="empty_quantity"
                                         type="text"
                                         min="0"
-                                        value={data.empty_quantity !== '' ? data.empty_quantity : data.filled_quantity}
+                                        value={data.empty_quantity}
                                         onChange={(e) => setData('empty_quantity', e.target.value)}
                                         placeholder="0"
                                     />

@@ -1,0 +1,510 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\PaymentMethod;
+use App\Enums\TransactionType;
+use App\Models\Brand;
+use App\Models\Catalogue;
+use App\Models\Customer;
+use App\Models\User;
+use App\Services\InventoryService;
+use App\Services\OrderService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
+use Tests\TestCase;
+
+/**
+ * Recording a sale touches stock, cost basis, and money at once.
+ *
+ * These assert the derived figures rather than the rows written: stock is the
+ * sum of the movement log and payment state is never stored, so checking the
+ * derivation is what proves the writes were right.
+ */
+class OrderRecordingTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $user;
+
+    private OrderService $orders;
+
+    private InventoryService $inventory;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->user = User::factory()->create();
+        $this->orders = app(OrderService::class);
+        $this->inventory = app(InventoryService::class);
+    }
+
+    private function makeCylinder(string $brandName): Catalogue
+    {
+        $brand = Brand::create([
+            'name' => $brandName,
+            'slug' => str($brandName)->slug()->toString(),
+        ]);
+
+        return Catalogue::create([
+            'type' => 'lpg_cylinder',
+            'brand_id' => $brand->id,
+            'weight' => 12.5,
+            'is_gas' => true,
+            'is_returnable' => true,
+        ]);
+    }
+
+    /** Stock on hand: 20 filled and 10 empty, at 900 a shell and 340 of gas. */
+    private function stockUp(Catalogue $item): void
+    {
+        $this->inventory->record([
+            'catalogue_id' => $item->id,
+            'purchased_at' => now()->subDays(2)->toDateString(),
+            'filled_quantity' => 20,
+            'empty_quantity' => 10,
+            'shell_unit_cost' => 900,
+            'gas_unit_cost' => 340,
+        ], $this->user->id);
+    }
+
+    private function stockOf(Catalogue $item): Catalogue
+    {
+        return Catalogue::withStock()->find($item->id);
+    }
+
+    /** @param  array<int, array<string, mixed>>  $items */
+    private function sell(array $items, array $overrides = []): \App\Models\Order
+    {
+        return $this->orders->record([
+            'mobile_number' => '01711111111',
+            'customer_name' => 'Rahim',
+            'occurred_at' => now()->toDateString(),
+            'items' => $items,
+            'is_paid' => true,
+            ...$overrides,
+        ], $this->user->id);
+    }
+
+    public function test_a_swap_moves_gas_out_and_a_shell_back(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell([[
+            'catalogue_id' => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity' => 2,
+            'unit_price' => 1400,
+        ]]);
+
+        $stock = $this->stockOf($jamuna);
+
+        $this->assertSame(2800.0, (float) $order->total_amount);
+        $this->assertSame('paid', $order->paymentState());
+        $this->assertSame(0.0, $order->dueAmount());
+        // A swap trades a filled cylinder for an empty one.
+        $this->assertSame(18, $stock->filledStock());
+        $this->assertSame(12, $stock->emptyStock());
+    }
+
+    public function test_a_swap_is_costed_at_the_gas_price_only(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell([[
+            'catalogue_id' => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity' => 1,
+            'unit_price' => 1400,
+        ]]);
+
+        // Blending the shell in would overstate the cost of the most common
+        // sale in the business by the whole price of a cylinder.
+        $this->assertSame(340.0, (float) $order->items->first()->unit_cost);
+    }
+
+    public function test_an_outright_cylinder_sale_is_costed_at_gas_plus_shell(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell([[
+            'catalogue_id' => $jamuna->id,
+            'transaction_type' => 'buy_with_gas',
+            'quantity' => 1,
+            'unit_price' => 3000,
+        ]]);
+
+        $stock = $this->stockOf($jamuna);
+
+        $this->assertSame(1240.0, (float) $order->items->first()->unit_cost);
+        // The shell leaves with the customer, so no empty comes back.
+        $this->assertSame(19, $stock->filledStock());
+        $this->assertSame(10, $stock->emptyStock());
+    }
+
+    public function test_a_bare_shell_sale_is_costed_at_the_shell_price_only(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell([[
+            'catalogue_id' => $jamuna->id,
+            'transaction_type' => 'buy_empty',
+            'quantity' => 2,
+            'unit_price' => 1000,
+        ]]);
+
+        $stock = $this->stockOf($jamuna);
+
+        $this->assertSame(900.0, (float) $order->items->first()->unit_cost);
+        // Empties leave; the filled count is untouched.
+        $this->assertSame(20, $stock->filledStock());
+        $this->assertSame(8, $stock->emptyStock());
+    }
+
+    public function test_a_cross_brand_swap_splits_across_both_products(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $bashundhara = $this->makeCylinder('Bashundhara');
+        $this->stockUp($jamuna);
+        $this->stockUp($bashundhara);
+
+        $this->sell([[
+            'catalogue_id' => $bashundhara->id,
+            // The customer handed back another brand's empty.
+            'returned_catalogue_id' => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity' => 3,
+            'unit_price' => 1450,
+        ]]);
+
+        $sold = $this->stockOf($bashundhara);
+        $returned = $this->stockOf($jamuna);
+
+        // Gas leaves the brand sold, and no shell comes back to it.
+        $this->assertSame(17, $sold->filledStock());
+        $this->assertSame(10, $sold->emptyStock());
+        // The shells land on the brand actually handed over.
+        $this->assertSame(20, $returned->filledStock());
+        $this->assertSame(13, $returned->emptyStock());
+    }
+
+    public function test_a_returned_shell_is_rejected_on_a_sale_that_returns_nothing(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $bashundhara = $this->makeCylinder('Bashundhara');
+        $this->stockUp($jamuna);
+
+        $this->expectException(ValidationException::class);
+
+        $this->sell([[
+            'catalogue_id' => $jamuna->id,
+            'returned_catalogue_id' => $bashundhara->id,
+            // Buying outright takes no shell back.
+            'transaction_type' => 'buy_with_gas',
+            'quantity' => 1,
+            'unit_price' => 3000,
+        ]]);
+    }
+
+    public function test_a_partial_payment_leaves_the_rest_owing(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell(
+            [[
+                'catalogue_id' => $jamuna->id,
+                'transaction_type' => 'buy_with_gas',
+                'quantity' => 1,
+                'unit_price' => 3000,
+            ]],
+            ['is_paid' => false, 'amount_paid' => 1000],
+        );
+
+        $this->assertSame(1000.0, $order->paidAmount());
+        $this->assertSame(2000.0, $order->dueAmount());
+        $this->assertSame('partial', $order->paymentState());
+    }
+
+    public function test_a_sale_entirely_on_credit_writes_no_payment_row(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell(
+            [[
+                'catalogue_id' => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity' => 1,
+                'unit_price' => 1400,
+            ]],
+            ['is_paid' => false, 'amount_paid' => 0],
+        );
+
+        // A zero-amount payment would record that nothing happened.
+        $this->assertSame(0, $order->payments()->count());
+        $this->assertSame('due', $order->paymentState());
+        $this->assertSame(1400.0, $order->dueAmount());
+    }
+
+    public function test_the_payment_method_is_recorded_on_a_paid_in_full_sale(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell(
+            [[
+                'catalogue_id' => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity' => 1,
+                'unit_price' => 1400,
+            ]],
+            ['payment_method' => 'mobile'],
+        );
+
+        // Money changes hands on a paid-in-full sale too, so the method must
+        // not be assumed to be cash.
+        $this->assertSame(PaymentMethod::Mobile, $order->payments()->first()->method);
+    }
+
+    public function test_a_multi_line_order_totals_from_its_items(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $bashundhara = $this->makeCylinder('Bashundhara');
+        $this->stockUp($jamuna);
+        $this->stockUp($bashundhara);
+
+        $order = $this->sell([
+            ['catalogue_id' => $jamuna->id, 'transaction_type' => 'swap', 'quantity' => 1, 'unit_price' => 1400],
+            ['catalogue_id' => $bashundhara->id, 'transaction_type' => 'buy_empty', 'quantity' => 2, 'unit_price' => 1000],
+        ]);
+
+        $this->assertCount(2, $order->items);
+        $this->assertSame(3400.0, (float) $order->total_amount);
+    }
+
+    public function test_a_customer_balance_accumulates_across_orders(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        foreach ([1000, 0] as $paid) {
+            $this->sell(
+                [[
+                    'catalogue_id' => $jamuna->id,
+                    'transaction_type' => 'buy_with_gas',
+                    'quantity' => 1,
+                    'unit_price' => 3000,
+                ]],
+                ['is_paid' => false, 'amount_paid' => $paid],
+            );
+        }
+
+        $customer = Customer::where('mobile_number', '01711111111')->first();
+
+        // 6000 billed, 1000 received. Summing payments through a join would
+        // repeat each order's total once per payment and overstate this.
+        $this->assertSame(5000.0, $customer->outstandingBalance());
+    }
+
+    public function test_an_existing_customer_is_reused_not_duplicated(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        foreach (['Rahim', 'Rahim Uddin'] as $name) {
+            $this->sell(
+                [[
+                    'catalogue_id' => $jamuna->id,
+                    'transaction_type' => 'swap',
+                    'quantity' => 1,
+                    'unit_price' => 1400,
+                ]],
+                ['customer_name' => $name],
+            );
+        }
+
+        $this->assertSame(1, Customer::where('mobile_number', '01711111111')->count());
+    }
+
+    public function test_customers_without_a_mobile_number_stay_separate(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        foreach (['Walk-in One', 'Walk-in Two'] as $name) {
+            $this->sell(
+                [[
+                    'catalogue_id' => $jamuna->id,
+                    'transaction_type' => 'swap',
+                    'quantity' => 1,
+                    'unit_price' => 1400,
+                ]],
+                ['mobile_number' => null, 'customer_name' => $name],
+            );
+        }
+
+        // A null number identifies nobody, so it must never match an earlier
+        // row — otherwise every walk-in would collide with the first.
+        $this->assertSame(2, Customer::whereNull('mobile_number')->count());
+    }
+
+    public function test_a_sale_can_be_recorded_with_no_customer_details(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell(
+            [[
+                'catalogue_id' => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity' => 1,
+                'unit_price' => 1400,
+            ]],
+            ['mobile_number' => null, 'customer_name' => ''],
+        );
+
+        // customers.name is not nullable and is used as a label throughout, so
+        // a blank name becomes a placeholder rather than an empty string.
+        $this->assertSame('Walk-in customer', $order->customer->name);
+        $this->assertNull($order->customer->mobile_number);
+        $this->assertSame(1400.0, (float) $order->total_amount);
+    }
+
+    public function test_a_cross_brand_swap_names_the_returned_product(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $bashundhara = $this->makeCylinder('Bashundhara');
+        $this->stockUp($jamuna);
+        $this->stockUp($bashundhara);
+
+        $this->sell([[
+            'catalogue_id' => $bashundhara->id,
+            'returned_catalogue_id' => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity' => 1,
+            'unit_price' => 1450,
+        ]]);
+
+        $row = $this->orders->paginate()->items()[0];
+
+        $this->assertSame('paid', $row['payment_state']);
+        $this->assertStringContainsString('Jamuna', $row['items'][0]['returned_name']);
+    }
+
+    public function test_a_same_brand_swap_does_not_name_the_returned_product(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $this->sell([[
+            'catalogue_id' => $jamuna->id,
+            'returned_catalogue_id' => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity' => 1,
+            'unit_price' => 1400,
+        ]]);
+
+        $row = $this->orders->paginate()->items()[0];
+
+        // Naming the same product twice would just be noise.
+        $this->assertNull($row['items'][0]['returned_name']);
+    }
+
+    public function test_orders_paginate_ten_to_a_page_newest_first(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        foreach (range(1, 12) as $n) {
+            $this->sell(
+                [[
+                    'catalogue_id' => $jamuna->id,
+                    'transaction_type' => 'swap',
+                    'quantity' => 1,
+                    'unit_price' => 1400,
+                ]],
+                [
+                    'mobile_number' => "017000000{$n}",
+                    'customer_name' => "Customer {$n}",
+                    'occurred_at' => now()->subDays($n)->toDateString(),
+                ],
+            );
+        }
+
+        $page = $this->orders->paginate();
+
+        $this->assertSame(12, $page->total());
+        $this->assertCount(10, $page->items());
+        // Customer 1 is the most recent, having been dated one day back.
+        $this->assertSame('Customer 1', $page->items()[0]['customer']['name']);
+    }
+
+    public function test_an_existing_customer_balance_is_exposed_for_the_form(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $this->sell(
+            [[
+                'catalogue_id' => $jamuna->id,
+                'transaction_type' => 'buy_with_gas',
+                'quantity' => 1,
+                'unit_price' => 3000,
+            ]],
+            ['address' => 'Dhaka', 'is_paid' => false, 'amount_paid' => 0],
+        );
+
+        $this->assertSame([
+            'name' => 'Rahim',
+            'address' => 'Dhaka',
+            'outstanding_balance' => 3000.0,
+        ], $this->orders->findCustomerByMobile('01711111111'));
+
+        $this->assertNull($this->orders->findCustomerByMobile('01999999999'));
+    }
+
+    public function test_an_invalid_line_rolls_the_whole_sale_back(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $before = $this->stockOf($jamuna)->filledStock();
+
+        try {
+            $this->sell([
+                ['catalogue_id' => $jamuna->id, 'transaction_type' => 'swap', 'quantity' => 1, 'unit_price' => 1400],
+                // Invalid: an outright purchase cannot take a shell back.
+                [
+                    'catalogue_id' => $jamuna->id,
+                    'returned_catalogue_id' => $jamuna->id,
+                    'transaction_type' => 'buy_with_gas',
+                    'quantity' => 1,
+                    'unit_price' => 3000,
+                ],
+            ]);
+        } catch (ValidationException) {
+            // Expected.
+        }
+
+        // The first line must not survive the second one failing, or stock
+        // would move for a sale that was never recorded.
+        $this->assertSame($before, $this->stockOf($jamuna)->filledStock());
+        $this->assertSame(0, Customer::where('mobile_number', '01711111111')->count());
+    }
+
+    public function test_every_transaction_type_is_offered_to_the_line_picker(): void
+    {
+        $types = collect($this->orders->transactionTypes());
+
+        $this->assertCount(count(TransactionType::cases()), $types);
+        // Only a swap takes a shell back, which is what enables cross-brand.
+        $this->assertTrue($types->firstWhere('value', 'swap')['returns_shell']);
+        $this->assertFalse($types->firstWhere('value', 'buy_with_gas')['returns_shell']);
+    }
+}

@@ -3,6 +3,7 @@
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\CatalogueController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -33,6 +34,14 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('inventories/update/{kind}/{id}', [InventoryController::class, 'update'])
             ->whereNumber('id')
             ->name('inventories.update');
+
+        Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
+        Route::get('orders/add', [OrderController::class, 'create'])->name('orders.create');
+        Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
+        // Called while the form is open, so it answers with JSON rather than a
+        // full Inertia page.
+        Route::get('orders/customer-lookup', [OrderController::class, 'lookupCustomer'])
+            ->name('orders.customer-lookup');
 
         Route::post('brands', [BrandController::class, 'store'])->name('brands.store');
     });
