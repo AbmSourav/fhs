@@ -1,5 +1,4 @@
 import AddBrandSheet from '@/components/catalogue/add-brand-sheet';
-import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

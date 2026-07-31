@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\CatalogueController;
+use App\Http\Controllers\InventoryController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -20,6 +21,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('catalogue', [CatalogueController::class, 'index'])->name('catalogue.index');
         Route::get('catalogue/setup', [CatalogueController::class, 'setup'])->name('catalogue.setup');
         Route::post('catalogue', [CatalogueController::class, 'store'])->name('catalogue.store');
+
+        Route::get('inventories', [InventoryController::class, 'index'])->name('inventories.index');
+        Route::get('inventories/add', [InventoryController::class, 'create'])->name('inventories.create');
+        Route::post('inventories', [InventoryController::class, 'store'])->name('inventories.store');
 
         Route::post('brands', [BrandController::class, 'store'])->name('brands.store');
     });
