@@ -28,15 +28,48 @@ export interface CustomerProfile extends Customer {
     timeline: TimelineEntry[];
 }
 
-/** One order in a customer's history. */
-export interface TimelineEntry {
+/**
+ * One moment in a customer's history.
+ *
+ * A sale and a payment collected later are separate events, so an order left
+ * due and settled a week on appears twice.
+ */
+export type TimelineEntry = TimelineSale | TimelinePayment;
+
+/**
+ * A sale, with what it left owing at the time.
+ *
+ * The amounts describe the moment of the sale, not today: money collected on a
+ * later visit belongs to its own entry, not this one.
+ */
+export interface TimelineSale {
+    kind: 'sale';
     id: number;
     occurred_at: string;
     total_amount: number;
+    /** Taken at delivery. Excludes anything collected later. */
     paid_amount: number;
+    /** What the customer walked away owing. */
     due_amount: number;
+    /** How the sale stood at the time — not its state now. */
     payment_state: 'paid' | 'partial' | 'due';
+    /** Whether that balance has since been collected. */
+    settled_later: boolean;
     items: TimelineItem[];
+}
+
+/** Money collected on a later visit, against an earlier sale. */
+export interface TimelinePayment {
+    kind: 'payment';
+    id: number;
+    occurred_at: string;
+    amount: number;
+    method_label: string;
+    /** What was still owed on that sale once this payment landed. */
+    due_amount: number;
+    order_id: number;
+    /** The sale being settled, so the entry can point back at it. */
+    order_occurred_at: string;
 }
 
 export interface TimelineItem {

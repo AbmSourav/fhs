@@ -3,9 +3,9 @@ import { Button } from '@/components/ui/button';
 import { formatDate, formatDateTime } from '@/lib/datetime';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { type CustomerProfile } from '@/types/customer';
+import { type CustomerProfile, type TimelinePayment, type TimelineSale } from '@/types/customer';
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Clock, MapPin, Package, Pencil } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, Package, Pencil, Wallet } from 'lucide-react';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
 const currency = new Intl.NumberFormat('en-BD', {
@@ -66,7 +66,7 @@ export default function CustomerHistory({ customer }: { customer: CustomerProfil
                             )}
                         </div>
 
-                        {customer.mobile_number && <p className="text-muted-foreground mt-1 text-sm">{customer.mobile_number}</p>}
+                        {customer.mobile_number && <p className="text-muted-foreground font-medium mt-1 text-sm">{customer.mobile_number}</p>}
 
                         {customer.address && (
                             <p className="text-muted-foreground mt-1 flex items-start gap-1 text-sm">
@@ -114,7 +114,7 @@ export default function CustomerHistory({ customer }: { customer: CustomerProfil
                     </div>
                 </dl>
 
-                <h2 className="mt-8 font-medium">History</h2>
+                <h2 className="mt-8 font-medium text-lg">History</h2>
 
                 {customer.timeline.length === 0 ? (
                     <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-12 text-center">
@@ -124,56 +124,118 @@ export default function CustomerHistory({ customer }: { customer: CustomerProfil
                 ) : (
                     /* The border runs down the left as the timeline spine; each
                        entry hangs its own marker on it. */
-                    <ol className="border-border border-green-200 mt-4 space-y-6 border-l pl-6">
-                        {customer.timeline.map((entry) => {
-                            const badge = paymentBadge[entry.payment_state];
-
-                            return (
-                                <li key={entry.id} className="relative mb-9">
-                                    <span className="bg-border absolute top-1.5 -left-[1.8125rem] size-2.5 rounded-full bg-green-400" />
-
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <p className="text-sm font-medium text-gray-600">{dateTime.format(new Date(entry.occurred_at))}</p>
-
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant={badge.variant}>{badge.label}</Badge>
-                                            <span className="font-medium tabular-nums">{currency.format(entry.total_amount)}</span>
-                                        </div>
-                                    </div>
-
-                                    <ul className="mt-2 space-y-1.5 rounded-md border p-3 text-sm">
-                                        {entry.items.map((item) => (
-                                            <li key={item.id} className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <p className="truncate font-medium">{item.display_name}</p>
-                                                    {/* Only on a cross-brand swap. */}
-                                                    {item.returned_name && (
-                                                        <p className="text-muted-foreground text-xs">Returned: {item.returned_name}</p>
-                                                    )}
-                                                    <p className="text-muted-foreground text-xs">
-                                                        {item.transaction_label} · {item.quantity}
-                                                    </p>
-                                                </div>
-
-                                                <span className="shrink-0 tabular-nums">{currency.format(item.line_total)}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-
-                                    {/* Only worth saying when something is still
-                                        owed on this particular order. */}
-                                    {entry.due_amount > 0 && (
-                                        <p className="text-muted-foreground mt-2 text-xs">
-                                            Paid {currency.format(entry.paid_amount)} ·{' '}
-                                            <span className="text-destructive font-medium">{currency.format(entry.due_amount)} due</span>
-                                        </p>
-                                    )}
-                                </li>
-                            );
-                        })}
+                    <ol className="mt-4 ml-4 w-full space-y-6 border-l border-border pl-6 lg:w-xl">
+                        {customer.timeline.map((entry) =>
+                            entry.kind === 'sale' ? (
+                                <SaleEntry key={`sale-${entry.id}`} entry={entry} />
+                            ) : (
+                                <PaymentEntry key={`payment-${entry.id}`} entry={entry} />
+                            ),
+                        )}
                     </ol>
                 )}
             </div>
         </AppLayout>
+    );
+}
+
+/** A sale: what was bought, and what it left owing at the time. */
+function SaleEntry({ entry }: { entry: TimelineSale }) {
+    const badge = paymentBadge[entry.payment_state];
+
+    return (
+        <li className="relative mb-9">
+            <span className="absolute top-1.5 -left-[1.8125rem] size-2.5 rounded-full bg-green-400" />
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-gray-600">{dateTime.format(new Date(entry.occurred_at))}</p>
+
+                <div className="flex items-center gap-2">
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
+                    <span className="font-medium tabular-nums">{currency.format(entry.total_amount)}</span>
+                </div>
+            </div>
+
+            <ul className="mt-2 space-y-1.5 rounded-md border p-3 text-sm">
+                {entry.items.map((item) => (
+                    <li key={item.id} className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="truncate font-medium">{item.display_name}</p>
+                            {/* Only on a cross-brand swap. */}
+                            {item.returned_name && <p className="text-muted-foreground text-xs">Returned: {item.returned_name}</p>}
+                            <p className="text-muted-foreground text-xs">
+                                {item.transaction_label} · {item.quantity}
+                            </p>
+                        </div>
+
+                        <span className="shrink-0 tabular-nums">{currency.format(item.line_total)}</span>
+                    </li>
+                ))}
+            </ul>
+
+            {/* Only worth saying when the customer left owing something. */}
+            {entry.due_amount > 0 && (
+                <p className="text-muted-foreground mt-1 text-sm">
+                    {/* Ties the sale to the payment entries that settle it,
+                        which name the same id. */}
+                    <span className="text-foreground mr-1 font-medium tabular-nums text-xs">#{entry.id}</span>
+                    <span className="text-xs">Paid {currency.format(entry.paid_amount)}</span> |
+                    {entry.settled_later ? (
+                        // Says the debt was real at the time but has since been
+                        // collected, so it is not mistaken for money still out.
+                        <span className="font-medium text-xs ml-1">Due {currency.format(entry.due_amount)}, collected later.</span>
+                    ) : (
+                        <span className="text-destructive font-medium">Due: {currency.format(entry.due_amount)}</span>
+                    )}
+                </p>
+            )}
+        </li>
+    );
+}
+
+/**
+ * Money collected on a later visit.
+ *
+ * Shown apart from the sale it settles: the customer was seen twice, and the
+ * history should say so.
+ */
+function PaymentEntry({ entry }: { entry: TimelinePayment }) {
+    return (
+        <li className="relative mb-9">
+            <span className="absolute top-1.5 -left-[1.8125rem] size-2.5 rounded-full bg-blue-400" />
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium text-gray-600">{dateTime.format(new Date(entry.occurred_at))}</p>
+
+                <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="gap-1">
+                        <Wallet className="size-3" />
+                        Payment
+                    </Badge>
+                    <span className="font-medium tabular-nums">{currency.format(entry.amount)}</span>
+                </div>
+            </div>
+
+            <div className="mt-2 rounded-md border p-3 text-sm">
+                <p className="text-muted-foreground">
+                    Due Payment, Method: {entry.method_label} <br />
+                    {/* The id makes the sale findable in the orders list, where
+                        the date alone could match several. */}
+                    Order ID: <span className="text-foreground font-medium tabular-nums">#{entry.order_id}</span> of{' '}
+                    {date.format(new Date(entry.order_occurred_at))}
+                </p>
+
+                {/* Says whether this cleared the balance or only reduced it. */}
+                <p className="text-muted-foreground mt-1 text-xs">
+                    {entry.due_amount > 0 ? (
+                        <>
+                            <span className="text-destructive font-medium">{currency.format(entry.due_amount)} still due</span> on that sale
+                        </>
+                    ) : (
+                        'That sale is now settled.'
+                    )}
+                </p>
+            </div>
+        </li>
     );
 }

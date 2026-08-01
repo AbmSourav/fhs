@@ -6,9 +6,11 @@ use App\Enums\OrderStatus;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Payment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 
 /**
@@ -27,6 +29,15 @@ class CustomerService
      * nothing about why — only that they are worth following up.
      */
     public const LAPSED_AFTER_DAYS = 45;
+
+    /**
+     * How far after a sale a payment counts as a separate visit.
+     *
+     * Settling at delivery stamps the payment at the sale's own time, but the
+     * two timestamps are written separately and can land a moment apart. This
+     * tolerance keeps that from reading as a second trip to the customer.
+     */
+    private const SEPARATE_VISIT_MINUTES = 2;
 
     /**
      * Has this customer gone quiet?
@@ -196,21 +207,101 @@ class CustomerService
             'last_ordered_at'   => $lastOrderedAt,
             'has_lapsed'        => $this->hasLapsed($lastOrderedAt),
             'lapsed_after_days' => static::LAPSED_AFTER_DAYS,
-            'timeline'          => $orders->map(fn (Order $order) => $this->presentTimelineEntry($order))->all(),
+            'timeline'          => $this->buildTimeline($orders),
+        ];
+    }
+
+    /**
+     * The customer's history as a single stream of events, newest first.
+     *
+     * A sale and a later payment are two separate moments: an order recorded as
+     * due and settled a week later appears twice, so the timeline reads as what
+     * actually happened rather than only the sale's current state.
+     *
+     * @param  Collection<int, Order>  $orders
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildTimeline(Collection $orders): array
+    {
+        $entries = [];
+
+        foreach ($orders as $order) {
+            $entries[] = $this->presentTimelineEntry($order);
+
+            foreach ($order->payments as $payment) {
+                // Money handed over at delivery is part of the sale, not a
+                // later event — showing it twice would just repeat the card.
+                if (! $this->isLaterPayment($payment, $order)) {
+                    continue;
+                }
+
+                $entries[] = $this->presentPaymentEntry($payment, $order);
+            }
+        }
+
+        // Sales and payments are collected per order, so the merged list needs
+        // re-sorting to read chronologically as a whole.
+        usort($entries, fn (array $a, array $b) => [$b['occurred_at'], $b['id']] <=> [$a['occurred_at'], $a['id']]);
+
+        return $entries;
+    }
+
+    /**
+     * Whether a payment arrived after the sale rather than at delivery.
+     *
+     * Recording a sale as paid stamps the payment at the moment of the sale, so
+     * anything meaningfully later was collected on a separate visit.
+     */
+    private function isLaterPayment(Payment $payment, Order $order): bool
+    {
+        return $payment->paid_at->diffInMinutes($order->occurred_at, absolute: true) >= static::SEPARATE_VISIT_MINUTES;
+    }
+
+    /**
+     * A payment collected after the sale, as its own timeline entry.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentPaymentEntry(Payment $payment, Order $order): array
+    {
+        // What was still owed once this payment landed, so a run of
+        // instalments reads as a balance coming down.
+        $paidSoFar = (float) $order->payments
+            ->filter(fn (Payment $each) => [$each->paid_at, $each->id] <= [$payment->paid_at, $payment->id])
+            ->sum('amount');
+
+        return [
+            'kind'         => 'payment',
+            'id'           => $payment->id,
+            'occurred_at'  => $payment->paid_at,
+            'amount'       => (float) $payment->amount,
+            'method_label' => $payment->method->label(),
+            'due_amount'   => round((float) $order->total_amount - $paidSoFar, 2),
+            // Ties the receipt back to the sale it settles.
+            'order_id'          => $order->id,
+            'order_occurred_at' => $order->occurred_at,
         ];
     }
 
     /**
      * One order as a timeline entry: when, what, and what it left owing.
      *
+     * The badge describes the sale as it stood at the time, not as it stands
+     * today. A sale left due and settled a week later reads as "Due" here, and
+     * the settlement gets its own entry further up the timeline — showing it as
+     * "Paid" would erase the week the customer owed for it.
+     *
      * @return array<string, mixed>
      */
     private function presentTimelineEntry(Order $order): array
     {
         $total = (float) $order->total_amount;
-        $paid = (float) $order->payments->sum('amount');
+        $paid = (float) $order->payments
+            ->reject(fn (Payment $payment) => $this->isLaterPayment($payment, $order))
+            ->sum('amount');
 
         return [
+            'kind'          => 'sale',
             'id'            => $order->id,
             'occurred_at'   => $order->occurred_at,
             'total_amount'  => $total,
@@ -221,7 +312,10 @@ class CustomerService
                 $paid > 0       => 'partial',
                 default         => 'due',
             },
-            'items' => $order->items->map(fn (OrderItem $item) => [
+            // Whether the balance left by this sale has since been collected,
+            // so a historic debt is not read as one still outstanding.
+            'settled_later' => $order->dueAmount() <= 0 && $paid < $total,
+            'items'         => $order->items->map(fn (OrderItem $item) => [
                 'id'                => $item->id,
                 'display_name'      => $item->catalogueItem->displayName(),
                 'transaction_label' => $item->transaction_type->label(),

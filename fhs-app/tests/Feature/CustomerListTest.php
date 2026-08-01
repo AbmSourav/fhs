@@ -10,6 +10,7 @@ use App\Services\CustomerService;
 use App\Services\InventoryService;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -77,6 +78,18 @@ class CustomerListTest extends TestCase
             ]],
             'is_paid' => true,
             ...$overrides,
+        ], $this->user->id);
+    }
+
+    /** Collect money against a customer's most recent sale. */
+    private function settle(Customer $customer, float $amount, Carbon $at): void
+    {
+        $order = $customer->orders()->latest('id')->first();
+
+        $this->orders->settle($order, [
+            'amount'  => $amount,
+            'method'  => 'cash',
+            'paid_at' => $at->toDateTimeString(),
         ], $this->user->id);
     }
 
@@ -249,6 +262,121 @@ class CustomerListTest extends TestCase
         $this->assertSame(1000.0, $profile['timeline'][0]['due_amount']);
         $this->assertSame('partial', $profile['timeline'][0]['payment_state']);
         $this->assertSame(1000.0, $profile['due_amount']);
+    }
+
+    public function test_paying_at_delivery_does_not_add_a_second_timeline_entry(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $timeline = $this->customers->presentProfile($customer)['timeline'];
+
+        // The money changed hands during the sale, so it is part of that entry
+        // rather than a separate visit.
+        $this->assertCount(1, $timeline);
+        $this->assertSame('sale', $timeline[0]['kind']);
+    }
+
+    public function test_settling_a_due_sale_later_adds_its_own_timeline_entry(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, [
+            'occurred_at' => now()->subDays(7)->toDateTimeString(),
+            'is_paid'     => false,
+        ]);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $this->settle($customer, 1400, now()->subDay());
+
+        $timeline = $this->customers->presentProfile($customer)['timeline'];
+
+        // Two moments: the sale a week ago, the payment yesterday.
+        $this->assertCount(2, $timeline);
+
+        $this->assertSame('payment', $timeline[0]['kind']);
+        $this->assertSame(1400.0, $timeline[0]['amount']);
+        $this->assertSame('Cash', $timeline[0]['method_label']);
+        // Nothing left owing once this landed.
+        $this->assertSame(0.0, $timeline[0]['due_amount']);
+
+        $this->assertSame('sale', $timeline[1]['kind']);
+    }
+
+    public function test_a_sale_settled_later_is_not_badged_paid_at_the_time_of_sale(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, [
+            'occurred_at' => now()->subDays(7)->toDateTimeString(),
+            'is_paid'     => false,
+        ]);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $this->settle($customer, 1400, now()->subDay());
+
+        $sale = collect($this->customers->presentProfile($customer)['timeline'])
+            ->firstWhere('kind', 'sale');
+
+        // The customer owed for a week. Badging the sale "Paid" because the
+        // money arrived later would erase that.
+        $this->assertSame('due', $sale['payment_state']);
+        $this->assertSame(0.0, $sale['paid_amount']);
+        $this->assertSame(1400.0, $sale['due_amount']);
+        // ...but the balance is not still outstanding.
+        $this->assertTrue($sale['settled_later']);
+    }
+
+    public function test_a_sale_still_owed_is_not_marked_settled_later(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, [
+            'occurred_at' => now()->subDays(7)->toDateTimeString(),
+            'is_paid'     => false,
+        ]);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $this->settle($customer, 400, now()->subDay());
+
+        $sale = collect($this->customers->presentProfile($customer)['timeline'])
+            ->firstWhere('kind', 'sale');
+
+        $this->assertSame('due', $sale['payment_state']);
+        $this->assertFalse($sale['settled_later']);
+    }
+
+    public function test_a_sale_paid_at_delivery_is_badged_paid(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $sale = $this->customers->presentProfile($customer)['timeline'][0];
+
+        $this->assertSame('paid', $sale['payment_state']);
+        $this->assertSame(1400.0, $sale['paid_amount']);
+        // Nothing was collected later, so there is nothing to explain.
+        $this->assertFalse($sale['settled_later']);
+    }
+
+    public function test_each_instalment_gets_its_own_entry_with_the_balance_at_the_time(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, [
+            'occurred_at' => now()->subDays(10)->toDateTimeString(),
+            'is_paid'     => false,
+        ]);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $this->settle($customer, 400, now()->subDays(5));
+        $this->settle($customer, 1000, now()->subDay());
+
+        $timeline = $this->customers->presentProfile($customer)['timeline'];
+
+        $this->assertCount(3, $timeline);
+
+        // Newest first, and each shows what was still owed at that moment
+        // rather than the sale's balance today.
+        $this->assertSame(1000.0, $timeline[0]['amount']);
+        $this->assertSame(0.0, $timeline[0]['due_amount']);
+
+        $this->assertSame(400.0, $timeline[1]['amount']);
+        $this->assertSame(1000.0, $timeline[1]['due_amount']);
+
+        $this->assertSame('sale', $timeline[2]['kind']);
     }
 
     public function test_a_customer_history_page_loads(): void
