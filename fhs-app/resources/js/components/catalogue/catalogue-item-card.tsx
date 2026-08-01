@@ -23,6 +23,19 @@ export default function CatalogueItemCard({ item }: { item: CatalogueItem }) {
                         Check stock
                     </Badge>
                 )}
+                {(item.filled_stock <= 2 && item.filled_stock > 0)  && (
+                    <Badge variant="warning" className="shrink-0 gap-1">
+                        <TriangleAlert className="size-3" />
+                        Low stock
+                    </Badge>
+                )}
+
+                {(item.filled_stock === 0)  && (
+                    <Badge variant="destructive" className="shrink-0 gap-1">
+                        <TriangleAlert className="size-3" />
+                        Stock out
+                    </Badge>
+                )}
             </div>
 
             <dl className="mt-4 flex gap-6 text-sm">

@@ -146,13 +146,13 @@ export default function CustomerHistory({ customer }: { customer: CustomerProfil
                                             <li key={item.id} className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
                                                     <p className="truncate font-medium">{item.display_name}</p>
-                                                    <p className="text-muted-foreground text-xs">
-                                                        {item.transaction_label} · {item.quantity}
-                                                    </p>
                                                     {/* Only on a cross-brand swap. */}
                                                     {item.returned_name && (
                                                         <p className="text-muted-foreground text-xs">Returned: {item.returned_name}</p>
                                                     )}
+                                                    <p className="text-muted-foreground text-xs">
+                                                        {item.transaction_label} · {item.quantity}
+                                                    </p>
                                                 </div>
 
                                                 <span className="shrink-0 tabular-nums">{currency.format(item.line_total)}</span>

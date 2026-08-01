@@ -63,6 +63,16 @@ export function businessNow(): string {
 }
 
 /**
+ * Today in business time, as `yyyy-mm-dd` for a date input.
+ *
+ * Taken from the business clock rather than the browser's, so a machine set to
+ * another timezone still agrees with the server about what day it is.
+ */
+export function businessToday(): string {
+    return businessNow().slice(0, 10);
+}
+
+/**
  * Read a datetime-local value as business time and return it as UTC.
  *
  * The input yields a bare `yyyy-mm-ddThh:mm` with no zone attached, so it has

@@ -44,6 +44,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
         Route::get('orders/add', [OrderController::class, 'create'])->name('orders.create');
         Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
+        Route::get('orders/pay/{order}', [OrderController::class, 'pay'])->name('orders.pay');
+        Route::post('orders/pay/{order}', [OrderController::class, 'storePayment'])->name('orders.pay.store');
         Route::get('orders/edit/{order}', [OrderController::class, 'edit'])->name('orders.edit');
         Route::patch('orders/update/{order}', [OrderController::class, 'update'])->name('orders.update');
         // Called while the form is open, so it answers with JSON rather than a

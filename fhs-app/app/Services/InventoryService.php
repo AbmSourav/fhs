@@ -35,10 +35,13 @@ class InventoryService
     public function rules(): array
     {
         return [
-            'catalogue_id'   => ['required', 'integer', 'exists:catalogue,id'],
-            'supplier'       => ['nullable', 'string', 'max:255'],
-            'invoice_ref'    => ['nullable', 'string', 'max:255'],
-            'purchased_at'   => ['required', 'date'],
+            'catalogue_id' => ['required', 'integer', 'exists:catalogue,id'],
+            'supplier'     => ['nullable', 'string', 'max:255'],
+            'invoice_ref'  => ['nullable', 'string', 'max:255'],
+            // Purchases are recorded after the goods arrive, so the date may be
+            // backdated but never set ahead: stock that has not been delivered
+            // yet must not count toward what is on the shelf.
+            'purchased_at'   => ['required', 'date', 'before_or_equal:today'],
             'transport_cost' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
             'other_cost'     => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
 
@@ -60,8 +63,9 @@ class InventoryService
     public function messages(): array
     {
         return [
-            'catalogue_id.required' => 'Choose which product was purchased.',
-            'catalogue_id.exists'   => 'That product is no longer in the catalogue.',
+            'catalogue_id.required'        => 'Choose which product was purchased.',
+            'catalogue_id.exists'          => 'That product is no longer in the catalogue.',
+            'purchased_at.before_or_equal' => 'A purchase cannot be dated in the future.',
         ];
     }
 

@@ -5,7 +5,7 @@ import { formatDateTime } from '@/lib/datetime';
 import { type Order } from '@/types/order';
 import { Link } from '@inertiajs/react';
 import { type VariantProps } from 'class-variance-authority';
-import { Pencil } from 'lucide-react';
+import { Pencil, Wallet } from 'lucide-react';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
 const currency = new Intl.NumberFormat('en-BD', {
@@ -104,14 +104,26 @@ export default function OrderCard({ order }: { order: Order }) {
                                     )}
                                 </dl>
 
-                                {order.is_editable && (
-                                    <Button variant="outline" size="sm" className="h-7 shrink-0 gap-1 p-2" asChild>
-                                        <Link href={`/orders/edit/${order.id}`}>
-                                            <Pencil className="size-3" />
-                                            Edit
-                                        </Link>
-                                    </Button>
-                                )}
+                                <div className="flex shrink-0 items-center gap-2">
+                                    {/* Only a sale with a balance can be settled. */}
+                                    {order.due_amount > 0 && (
+                                        <Button size="sm" className="h-7 gap-1 p-2" asChild>
+                                            <Link href={`/orders/pay/${order.id}`}>
+                                                <Wallet className="size-3" />
+                                                Pay
+                                            </Link>
+                                        </Button>
+                                    )}
+
+                                    {order.is_editable && (
+                                        <Button variant="outline" size="sm" className="h-7 gap-1 p-2" asChild>
+                                            <Link href={`/orders/edit/${order.id}`}>
+                                                <Pencil className="size-3" />
+                                                Edit
+                                            </Link>
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         }
                     </AccordionContent>

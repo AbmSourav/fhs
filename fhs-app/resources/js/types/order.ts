@@ -84,6 +84,26 @@ export interface OrderFormLine {
     unit_price: string;
 }
 
+/** A sale with what it still owes, for the payment form. */
+export interface OrderPayment {
+    id: number;
+    customer: Pick<OrderCustomer, 'name' | 'mobile_number'>;
+    occurred_at: string;
+    total_amount: number;
+    paid_amount: number;
+    /** What is left to settle. Prefills the amount field. */
+    due_amount: number;
+    /** What has been received so far, so staff can see the instalments. */
+    payments: ReceivedPayment[];
+}
+
+export interface ReceivedPayment {
+    id: number;
+    amount: number;
+    method: string;
+    paid_at: string;
+}
+
 /** An existing customer found by mobile number while filling in the form. */
 export interface CustomerLookup {
     name: string;

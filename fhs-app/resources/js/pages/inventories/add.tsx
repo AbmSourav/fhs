@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { businessToday } from '@/lib/datetime';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type PurchasableItem, type PurchaseFormValues } from '@/types/inventory';
@@ -11,12 +12,13 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
-/** Today in the `yyyy-mm-dd` shape a date input expects, in local time. */
-function today(): string {
-    const now = new Date();
-
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
+/**
+ * Today in the `yyyy-mm-dd` shape a date input expects.
+ *
+ * Business time rather than the browser's, so the picker and the server agree
+ * on what day it is.
+ */
+const today = businessToday;
 
 interface InventoryFormProps {
     items: PurchasableItem[];
@@ -355,6 +357,9 @@ export default function InventoryForm({ items, purchase, kind, blockedReason }: 
                                 type="date"
                                 value={data.purchased_at}
                                 onChange={(e) => setData('purchased_at', e.target.value)}
+                                // Stops the picker offering a future date. The
+                                // server rejects one regardless.
+                                max={today()}
                                 required
                             />
                             <InputError message={errors.purchased_at} />

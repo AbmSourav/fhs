@@ -73,6 +73,36 @@ class OrderController extends Controller
             ->with('success', "Sale updated for {$updated->customer->name}.");
     }
 
+    /** The form for settling what a sale still owes. */
+    public function pay(Order $order): Response
+    {
+        $order->load(['customer', 'payments']);
+
+        return Inertia::render('orders/pay', [
+            'order' => $this->orders->presentForPayment($order),
+        ]);
+    }
+
+    public function storePayment(Request $request, Order $order): RedirectResponse
+    {
+        $data = $request->validate(
+            $this->orders->paymentRules(),
+            $this->orders->paymentMessages(),
+        );
+
+        // Overpayment and already-settled orders throw ValidationException,
+        // which Inertia turns into form errors on the redirect back.
+        $payment = $this->orders->settle($order, $data, $request->user()->id);
+
+        $remaining = $order->fresh()->dueAmount();
+
+        $message = $remaining > 0
+            ? "Payment recorded. {$remaining} still owed."
+            : "Payment recorded. {$order->customer->name}'s sale is now settled.";
+
+        return to_route('orders.index')->with('success', $message);
+    }
+
     /**
      * Look up a customer while the sale form is being filled in.
      *

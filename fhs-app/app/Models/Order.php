@@ -21,6 +21,15 @@ class Order extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * How long a settled sale stays editable.
+     *
+     * A paid order is a closed transaction: the money is in and the customer
+     * has gone. The window is only there to catch a mistake noticed straight
+     * away. An unpaid one is still live, so it stays open indefinitely.
+     */
+    public const PAID_EDIT_WINDOW_HOURS = 1;
+
     protected $fillable = [
         'customer_id',
         'user_id',
@@ -118,15 +127,6 @@ class Order extends Model
     {
         return $this->paymentState() === 'paid';
     }
-
-    /**
-     * How long a settled sale stays editable.
-     *
-     * A paid order is a closed transaction: the money is in and the customer
-     * has gone. The window is only there to catch a mistake noticed straight
-     * away. An unpaid one is still live, so it stays open indefinitely.
-     */
-    public const PAID_EDIT_WINDOW_HOURS = 1;
 
     /**
      * Can this sale still be corrected?

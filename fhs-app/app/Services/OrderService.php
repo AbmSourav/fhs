@@ -177,6 +177,92 @@ class OrderService
     }
 
     /**
+     * Validation rules for settling an outstanding balance.
+     *
+     * @return array<string, mixed>
+     */
+    public function paymentRules(): array
+    {
+        return [
+            'amount'  => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
+            'method'  => ['required', Rule::enum(PaymentMethod::class)],
+            'paid_at' => ['required', 'date', 'before_or_equal:now'],
+        ];
+    }
+
+    public function paymentMessages(): array
+    {
+        return [
+            'amount.min'              => 'Enter how much was received.',
+            'paid_at.before_or_equal' => 'A payment cannot be dated in the future.',
+        ];
+    }
+
+    /**
+     * Record money received against an order.
+     *
+     * Appends a payment rather than adjusting one: each receipt is its own
+     * event, so a customer paying in instalments leaves a record of every one.
+     *
+     * @throws ValidationException
+     */
+    public function settle(Order $order, array $data, int $receivedBy): Payment
+    {
+        $due = $order->dueAmount();
+
+        if ($due <= 0) {
+            throw ValidationException::withMessages([
+                'amount' => 'This sale is already paid in full.',
+            ]);
+        }
+
+        $amount = round((float) $data['amount'], 2);
+
+        // Overpaying would make the balance negative and read as credit the
+        // business does not track.
+        if ($amount > $due) {
+            throw ValidationException::withMessages([
+                'amount' => "That is more than the {$due} still owed on this sale.",
+            ]);
+        }
+
+        return Payment::create([
+            'order_id'    => $order->id,
+            'amount'      => $amount,
+            'method'      => $data['method'],
+            'received_by' => $receivedBy,
+            'paid_at'     => $data['paid_at'],
+        ]);
+    }
+
+    /**
+     * An order in the shape the payment form expects.
+     *
+     * @return array<string, mixed>
+     */
+    public function presentForPayment(Order $order): array
+    {
+        return [
+            'id'       => $order->id,
+            'customer' => [
+                'name'          => $order->customer->name,
+                'mobile_number' => $order->customer->mobile_number,
+            ],
+            'occurred_at'  => $order->occurred_at,
+            'total_amount' => (float) $order->total_amount,
+            'paid_amount'  => $order->paidAmount(),
+            // Prefills the amount field: settling in full is the common case.
+            'due_amount' => $order->dueAmount(),
+            'payments'   => $order->payments->map(fn (Payment $payment) => [
+                'id'      => $payment->id,
+                'amount'  => (float) $payment->amount,
+                'method'  => $payment->method->label(),
+                'paid_at' => $payment->paid_at,
+            ])->all(),
+        ];
+    }
+
+    /**
      * Add one product to an order, with the stock movements it causes.
      *
      * @throws ValidationException

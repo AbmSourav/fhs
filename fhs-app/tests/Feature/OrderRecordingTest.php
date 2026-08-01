@@ -968,6 +968,154 @@ class OrderRecordingTest extends TestCase
         $this->assertSame($at->format('Y-m-d\TH:i'), $form['occurred_at']);
     }
 
+    /** A sale of 1400 with nothing yet received. */
+    private function sellOnCredit(): Order
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        return $this->sell(
+            [[
+                'catalogue_id'     => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity'         => 1,
+                'unit_price'       => 1400,
+            ]],
+            ['is_paid' => false, 'amount_paid' => 0],
+        );
+    }
+
+    public function test_a_payment_settles_an_outstanding_balance(): void
+    {
+        $order = $this->sellOnCredit();
+
+        $this->orders->settle($order, [
+            'amount'  => 1400,
+            'method'  => 'cash',
+            'paid_at' => now()->format('Y-m-d H:i:s'),
+        ], $this->user->id);
+
+        $fresh = $order->fresh();
+
+        $this->assertSame(0.0, $fresh->dueAmount());
+        $this->assertSame('paid', $fresh->paymentState());
+    }
+
+    public function test_a_part_payment_leaves_the_remainder_owing(): void
+    {
+        $order = $this->sellOnCredit();
+
+        $this->orders->settle($order, [
+            'amount'  => 500,
+            'method'  => 'cash',
+            'paid_at' => now()->format('Y-m-d H:i:s'),
+        ], $this->user->id);
+
+        $fresh = $order->fresh();
+
+        $this->assertSame(900.0, $fresh->dueAmount());
+        $this->assertSame('partial', $fresh->paymentState());
+    }
+
+    public function test_instalments_each_leave_their_own_record(): void
+    {
+        $order = $this->sellOnCredit();
+
+        foreach ([400, 600, 400] as $amount) {
+            $this->orders->settle($order->fresh(), [
+                'amount'  => $amount,
+                'method'  => 'cash',
+                'paid_at' => now()->format('Y-m-d H:i:s'),
+            ], $this->user->id);
+        }
+
+        $fresh = $order->fresh();
+
+        // Each receipt is its own event, not an adjustment of the last.
+        $this->assertSame(3, $fresh->payments()->count());
+        $this->assertSame(1400.0, $fresh->paidAmount());
+        $this->assertSame(0.0, $fresh->dueAmount());
+    }
+
+    public function test_a_payment_cannot_exceed_what_is_owed(): void
+    {
+        $order = $this->sellOnCredit();
+
+        try {
+            $this->orders->settle($order, [
+                'amount'  => 2000,
+                'method'  => 'cash',
+                'paid_at' => now()->format('Y-m-d H:i:s'),
+            ], $this->user->id);
+
+            $this->fail('Overpaying should be rejected.');
+        } catch (ValidationException) {
+            // Expected.
+        }
+
+        // Otherwise the balance would go negative and read as credit the
+        // business does not track.
+        $this->assertSame(0, $order->fresh()->payments()->count());
+    }
+
+    public function test_a_settled_sale_cannot_be_paid_again(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $order = $this->sell([[
+            'catalogue_id'     => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity'         => 1,
+            'unit_price'       => 1400,
+        ]]);
+
+        $this->expectException(ValidationException::class);
+
+        $this->orders->settle($order, [
+            'amount'  => 100,
+            'method'  => 'cash',
+            'paid_at' => now()->format('Y-m-d H:i:s'),
+        ], $this->user->id);
+    }
+
+    public function test_a_payment_cannot_be_dated_in_the_future(): void
+    {
+        $order = $this->sellOnCredit();
+
+        config(['app.admin_emails' => [strtolower($this->user->email)]]);
+
+        $this->actingAs($this->user)
+            ->post("/orders/pay/{$order->id}", [
+                'amount'  => 500,
+                'method'  => 'cash',
+                'paid_at' => now()->addDay()->format('Y-m-d H:i:s'),
+            ])
+            ->assertSessionHasErrors('paid_at');
+
+        $this->assertSame(0, $order->fresh()->payments()->count());
+    }
+
+    public function test_the_payment_form_prefills_the_outstanding_balance(): void
+    {
+        $order = $this->sellOnCredit();
+
+        $this->orders->settle($order, [
+            'amount'  => 400,
+            'method'  => 'mobile',
+            'paid_at' => now()->format('Y-m-d H:i:s'),
+        ], $this->user->id);
+
+        $form = $this->orders->presentForPayment($order->fresh(['customer', 'payments']));
+
+        $this->assertSame(1400.0, $form['total_amount']);
+        $this->assertSame(400.0, $form['paid_amount']);
+        // Settling in full is the common case, so this prefills the field.
+        $this->assertSame(1000.0, $form['due_amount']);
+        $this->assertCount(1, $form['payments']);
+        $this->assertSame('Mobile payment', $form['payments'][0]['method']);
+    }
+
     public function test_every_transaction_type_is_offered_to_the_line_picker(): void
     {
         $types = collect($this->orders->transactionTypes());
