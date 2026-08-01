@@ -39,7 +39,10 @@ class OrderService
             'customer_name' => ['nullable', 'string', 'max:255'],
             'address'       => ['nullable', 'string', 'max:1000'],
 
-            'occurred_at' => ['required', 'date'],
+            // Sales are recorded after the fact, so the date may be backdated
+            // but never set ahead: a sale that has not happened yet would move
+            // stock that is still on the shelf.
+            'occurred_at' => ['required', 'date', 'before_or_equal:now'],
 
             'items'                    => ['required', 'array', 'min:1'],
             'items.*.catalogue_id'     => ['required', 'integer', 'exists:catalogue,id'],
@@ -65,6 +68,7 @@ class OrderService
     public function messages(): array
     {
         return [
+            'occurred_at.before_or_equal' => 'A sale cannot be dated in the future.',
             'items.required'              => 'Add at least one product to the order.',
             'items.*.unit_price.required' => 'Enter a price for each product.',
         ];
@@ -424,8 +428,11 @@ class OrderService
             'mobile_number' => $order->customer->mobile_number ?? '',
             'customer_name' => $order->customer->name,
             'address'       => $order->customer->address ?? '',
-            'occurred_at'   => $order->occurred_at->toDateString(),
-            'items'         => $order->items->map(fn (OrderItem $item) => [
+            // The shape a datetime-local input requires. The stored value keeps
+            // its seconds; toDateString() would drop the time entirely and
+            // silently reset the sale to midnight on save.
+            'occurred_at' => $order->occurred_at->format('Y-m-d\TH:i'),
+            'items'       => $order->items->map(fn (OrderItem $item) => [
                 'catalogue_id'     => (string) $item->catalogue_id,
                 'transaction_type' => $item->transaction_type->value,
                 // Empty unless the customer handed back another brand, which

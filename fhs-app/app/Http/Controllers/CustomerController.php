@@ -22,6 +22,14 @@ class CustomerController extends Controller
         ]);
     }
 
+    /** One customer's trading history, newest first. */
+    public function history(Customer $customer): Response
+    {
+        return Inertia::render('customers/history', [
+            'customer' => $this->customers->presentProfile($customer),
+        ]);
+    }
+
     public function edit(Customer $customer): Response
     {
         return Inertia::render('customers/edit', [

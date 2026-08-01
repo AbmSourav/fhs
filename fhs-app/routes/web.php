@@ -37,6 +37,7 @@ Route::middleware(['auth'])->group(function () {
             ->name('inventories.update');
 
         Route::get('customers', [CustomerController::class, 'index'])->name('customers.index');
+        Route::get('customers/{customer}/history', [CustomerController::class, 'history'])->name('customers.history');
         Route::get('customers/edit/{customer}', [CustomerController::class, 'edit'])->name('customers.edit');
         Route::patch('customers/update/{customer}', [CustomerController::class, 'update'])->name('customers.update');
 

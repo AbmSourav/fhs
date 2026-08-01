@@ -30,7 +30,7 @@ export default function CustomersIndex({ customers }: { customers: Paginated<Cus
                     </div>
                 ) : (
                     <>
-                        <ul className="mt-6 grid items-start gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <ul className="mt-6 grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {customers.data.map((customer) => (
                                 <CustomerCard key={customer.id} customer={customer} />
                             ))}

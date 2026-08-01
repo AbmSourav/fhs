@@ -1,6 +1,7 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { BUSINESS_TIME_ZONE, formatDate } from '@/lib/datetime';
 import { type InventoryPurchase } from '@/types/inventory';
 import { Link } from '@inertiajs/react';
 import { Pencil, RotateCcw } from 'lucide-react';
@@ -13,13 +14,9 @@ const currency = new Intl.NumberFormat('en-BD', {
     maximumFractionDigits: 0,
 });
 
-// en-GB puts the day before the month, giving "Wed 29 Jul 2026".
-const date = new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-});
+// Shown in business time: stored timestamps are UTC, so leaving it to the
+// browser would render the same purchase differently in another timezone.
+const date = formatDate;
 
 // A correction happens at a moment, unlike purchased_at which is a date the
 // user picks — so this one carries the time as well.
@@ -30,6 +27,7 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
     year: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: BUSINESS_TIME_ZONE,
 });
 
 /** A single recorded purchase. */

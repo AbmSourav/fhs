@@ -868,6 +868,106 @@ class OrderRecordingTest extends TestCase
         $this->assertSame('1400', $form['items'][0]['cylinder_price']);
     }
 
+    public function test_a_sale_cannot_be_dated_in_the_future(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        config(['app.admin_emails' => [strtolower($this->user->email)]]);
+
+        $this->actingAs($this->user)
+            ->post('/orders', [
+                'mobile_number' => '01711111111',
+                'customer_name' => 'Rahim',
+                // Tomorrow: a sale that has not happened yet would move stock
+                // still sitting on the shelf.
+                'occurred_at' => now()->addDay()->format('Y-m-d H:i:s'),
+                'items'       => [[
+                    'catalogue_id'     => $jamuna->id,
+                    'transaction_type' => 'swap',
+                    'quantity'         => 1,
+                    'unit_price'       => 1400,
+                ]],
+                'is_paid' => true,
+            ])
+            ->assertSessionHasErrors('occurred_at');
+
+        $this->assertSame(0, Order::count());
+    }
+
+    public function test_a_sale_can_be_backdated(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        config(['app.admin_emails' => [strtolower($this->user->email)]]);
+
+        // Deliveries made on Saturday, entered on Monday.
+        $this->actingAs($this->user)
+            ->post('/orders', [
+                'mobile_number' => '01711111111',
+                'customer_name' => 'Rahim',
+                'occurred_at'   => now()->subDays(2)->format('Y-m-d H:i:s'),
+                'items'         => [[
+                    'catalogue_id'     => $jamuna->id,
+                    'transaction_type' => 'swap',
+                    'quantity'         => 1,
+                    'unit_price'       => 1400,
+                ]],
+                'is_paid' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Order::count());
+    }
+
+    public function test_a_sale_keeps_the_time_it_happened(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $at = now()->subHours(3)->setSeconds(0);
+
+        $order = $this->sell(
+            [[
+                'catalogue_id'     => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity'         => 1,
+                'unit_price'       => 1400,
+            ]],
+            ['occurred_at' => $at->format('Y-m-d H:i:s')],
+        );
+
+        // Storing only the date would put every sale at midnight, losing the
+        // order in which a day's deliveries happened.
+        $this->assertSame($at->format('Y-m-d H:i'), $order->occurred_at->format('Y-m-d H:i'));
+        $this->assertNotSame('00:00', $order->occurred_at->format('H:i'));
+    }
+
+    public function test_the_edit_form_gives_the_time_back_to_the_input(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $at = now()->subHours(5)->setSeconds(0);
+
+        $order = $this->sell(
+            [[
+                'catalogue_id'     => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity'         => 1,
+                'unit_price'       => 1400,
+            ]],
+            ['occurred_at' => $at->format('Y-m-d H:i:s')],
+        );
+
+        $form = $this->orders->presentForForm($order->fresh(['customer', 'items', 'payments']));
+
+        // A datetime-local input only accepts this shape; a bare date would
+        // leave the field blank and reset the sale to midnight on save.
+        $this->assertSame($at->format('Y-m-d\TH:i'), $form['occurred_at']);
+    }
+
     public function test_every_transaction_type_is_offered_to_the_line_picker(): void
     {
         $types = collect($this->orders->transactionTypes());

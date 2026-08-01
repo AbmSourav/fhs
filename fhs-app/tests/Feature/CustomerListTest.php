@@ -178,6 +178,89 @@ class CustomerListTest extends TestCase
         $this->assertSame('12 Green Road, Dhaka', $row['address']);
     }
 
+    public function test_a_customer_lapses_after_forty_five_quiet_days(): void
+    {
+        $this->sellTo('01700000001', 'Recent', 1400, ['occurred_at' => now()->subDays(44)->toDateString()]);
+        $this->sellTo('01700000002', 'Lapsed', 1400, ['occurred_at' => now()->subDays(46)->toDateString()]);
+
+        $rows = collect($this->customers->paginate()->items());
+
+        $this->assertFalse($rows->firstWhere('name', 'Recent')['has_lapsed']);
+        $this->assertTrue($rows->firstWhere('name', 'Lapsed')['has_lapsed']);
+    }
+
+    public function test_a_customer_who_never_ordered_has_not_lapsed(): void
+    {
+        Customer::create(['name' => 'Prospect', 'mobile_number' => '01700000009']);
+
+        $row = collect($this->customers->paginate()->items())->firstWhere('name', 'Prospect');
+
+        // There is no buying rhythm to have fallen out of.
+        $this->assertFalse($row['has_lapsed']);
+    }
+
+    public function test_a_recent_order_clears_an_earlier_quiet_spell(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, ['occurred_at' => now()->subDays(90)->toDateString()]);
+        $this->sellTo('01700000001', 'Rahim', 1400, ['occurred_at' => now()->subDays(3)->toDateString()]);
+
+        $row = collect($this->customers->paginate()->items())->firstWhere('name', 'Rahim');
+
+        // Only the most recent order counts, not the gap before it.
+        $this->assertFalse($row['has_lapsed']);
+    }
+
+    public function test_a_customer_history_lists_their_orders_newest_first(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, ['occurred_at' => now()->subDays(10)->toDateString()]);
+        $this->sellTo('01700000001', 'Rahim', 1600, ['occurred_at' => now()->subDays(2)->toDateString()]);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $profile = $this->customers->presentProfile($customer);
+
+        $this->assertSame(2, $profile['order_count']);
+        $this->assertSame(3000.0, $profile['total_spent']);
+        $this->assertCount(2, $profile['timeline']);
+        $this->assertSame(1600.0, $profile['timeline'][0]['total_amount']);
+        $this->assertSame(1400.0, $profile['timeline'][1]['total_amount']);
+    }
+
+    public function test_a_customer_history_shows_what_was_bought(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $entry = $this->customers->presentProfile($customer)['timeline'][0];
+
+        $this->assertSame(1, $entry['items'][0]['quantity']);
+        $this->assertSame('Swap / refill', $entry['items'][0]['transaction_label']);
+        $this->assertStringContainsString('Jamuna', $entry['items'][0]['display_name']);
+        $this->assertSame('paid', $entry['payment_state']);
+    }
+
+    public function test_a_customer_history_reports_what_each_order_still_owes(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400, ['is_paid' => false, 'amount_paid' => 400]);
+
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+        $profile = $this->customers->presentProfile($customer);
+
+        $this->assertSame(400.0, $profile['timeline'][0]['paid_amount']);
+        $this->assertSame(1000.0, $profile['timeline'][0]['due_amount']);
+        $this->assertSame('partial', $profile['timeline'][0]['payment_state']);
+        $this->assertSame(1000.0, $profile['due_amount']);
+    }
+
+    public function test_a_customer_history_page_loads(): void
+    {
+        $this->sellTo('01700000001', 'Rahim', 1400);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)
+            ->get("/customers/{$customer->id}/history")
+            ->assertOk();
+    }
+
     public function test_a_customer_name_mobile_and_address_can_be_updated(): void
     {
         $customer = Customer::create([

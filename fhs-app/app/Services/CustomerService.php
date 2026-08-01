@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Models\Customer;
+use App\Models\Order;
+use App\Models\OrderItem;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -17,6 +19,27 @@ use Illuminate\Validation\Rule;
  */
 class CustomerService
 {
+    /**
+     * How long without an order before a customer counts as lapsed.
+     *
+     * Cylinders are refilled on a fairly predictable cycle, so a gap this long
+     * means someone is overdue rather than simply between purchases. It says
+     * nothing about why — only that they are worth following up.
+     */
+    public const LAPSED_AFTER_DAYS = 45;
+
+    /**
+     * Has this customer gone quiet?
+     *
+     * A customer who has never ordered is not lapsed: there is no rhythm to
+     * have fallen out of.
+     */
+    private function hasLapsed(?Carbon $lastOrderedAt): bool
+    {
+        return $lastOrderedAt !== null
+            && $lastOrderedAt->diffInDays(now()) >= static::LAPSED_AFTER_DAYS;
+    }
+
     /**
      * Customers with their trading history, most frequent first.
      *
@@ -116,6 +139,13 @@ class CustomerService
         $billed = (float) ($customer->billed_total ?? 0);
         $paid = (float) ($customer->paid_total ?? 0);
 
+        // withMax returns a raw string: aggregate aliases bypass the model's
+        // casts, so this is converted here to match every other date the
+        // frontend receives.
+        $lastOrderedAt = $customer->last_ordered_at !== null
+            ? Carbon::parse($customer->last_ordered_at)
+            : null;
+
         return [
             'id'            => $customer->id,
             'name'          => $customer->name,
@@ -124,13 +154,86 @@ class CustomerService
             'order_count'   => (int) $customer->order_count,
             'total_spent'   => $billed,
             // What is still owed across every order that happened.
-            'due_amount' => round($billed - $paid, 2),
-            // withMax returns a raw string: aggregate aliases bypass the
-            // model's casts, so this is converted here to match every other
-            // date the frontend receives.
-            'last_ordered_at' => $customer->last_ordered_at !== null
-                ? Carbon::parse($customer->last_ordered_at)
-                : null,
+            'due_amount'      => round($billed - $paid, 2),
+            'last_ordered_at' => $lastOrderedAt,
+            // Overdue for a repeat purchase, not necessarily gone for good.
+            'has_lapsed' => $this->hasLapsed($lastOrderedAt),
+        ];
+    }
+
+    /**
+     * One customer with everything their history page needs.
+     *
+     * @return array<string, mixed>
+     */
+    public function presentProfile(Customer $customer): array
+    {
+        $orders = $customer->orders()
+            ->happened()
+            ->with([
+                'items.catalogueItem'         => fn ($query) => $query->withTrashed()->with('brand'),
+                'items.returnedCatalogueItem' => fn ($query) => $query->withTrashed()->with('brand'),
+                'payments',
+            ])
+            ->latest('occurred_at')
+            // Ties on occurred_at would otherwise order arbitrarily, so a
+            // backdated batch would shuffle between page loads.
+            ->latest('id')
+            ->get();
+
+        $billed = (float) $orders->sum('total_amount');
+        $paid = (float) $orders->sum(fn (Order $order) => $order->payments->sum('amount'));
+        $lastOrderedAt = $orders->first()?->occurred_at;
+
+        return [
+            'id'                => $customer->id,
+            'name'              => $customer->name,
+            'mobile_number'     => $customer->mobile_number,
+            'address'           => $customer->address,
+            'order_count'       => $orders->count(),
+            'total_spent'       => $billed,
+            'due_amount'        => round($billed - $paid, 2),
+            'last_ordered_at'   => $lastOrderedAt,
+            'has_lapsed'        => $this->hasLapsed($lastOrderedAt),
+            'lapsed_after_days' => static::LAPSED_AFTER_DAYS,
+            'timeline'          => $orders->map(fn (Order $order) => $this->presentTimelineEntry($order))->all(),
+        ];
+    }
+
+    /**
+     * One order as a timeline entry: when, what, and what it left owing.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentTimelineEntry(Order $order): array
+    {
+        $total = (float) $order->total_amount;
+        $paid = (float) $order->payments->sum('amount');
+
+        return [
+            'id'            => $order->id,
+            'occurred_at'   => $order->occurred_at,
+            'total_amount'  => $total,
+            'paid_amount'   => $paid,
+            'due_amount'    => round($total - $paid, 2),
+            'payment_state' => match (true) {
+                $paid >= $total => 'paid',
+                $paid > 0       => 'partial',
+                default         => 'due',
+            },
+            'items' => $order->items->map(fn (OrderItem $item) => [
+                'id'                => $item->id,
+                'display_name'      => $item->catalogueItem->displayName(),
+                'transaction_label' => $item->transaction_type->label(),
+                'quantity'          => $item->quantity,
+                'line_total'        => (float) $item->line_total,
+                // Only on a cross-brand swap: the empty handed back was a
+                // different product from the one sold.
+                'returned_name' => $item->returned_catalogue_id !== null
+                    && $item->returned_catalogue_id !== $item->catalogue_id
+                        ? $item->returnedCatalogueItem?->displayName()
+                        : null,
+            ])->all(),
         ];
     }
 }

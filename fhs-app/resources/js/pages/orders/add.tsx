@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { businessInputToUtc, businessNow, toBusinessInputValue } from '@/lib/datetime';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type CustomerLookup, type OrderFormValues, type SellableItem, type TransactionTypeOption } from '@/types/order';
@@ -12,12 +13,14 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 
-/** Today in the `yyyy-mm-dd` shape a date input expects, in local time. */
-function today(): string {
-    const now = new Date();
-
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
+/**
+ * Now, in the shape a datetime-local input expects, in business time.
+ *
+ * The input has no timezone of its own, so the value has to be converted before
+ * it goes in — otherwise staff would be typing against a UTC clock while every
+ * date on screen reads in business time.
+ */
+const now = businessNow;
 
 const emptyLine: OrderLineValues = {
     catalogue_id: '',
@@ -46,11 +49,13 @@ export default function OrderForm({ items, transactionTypes, order, blockedReaso
         isEditing ? { title: 'Edit', href: '#' } : { title: 'Add', href: '/orders/add' },
     ];
 
-    const { data, setData, post, patch, errors, processing } = useForm({
+    const { data, setData, post, patch, transform, errors, processing } = useForm({
         mobile_number: order?.mobile_number ?? '',
         customer_name: order?.customer_name ?? '',
         address: order?.address ?? '',
-        occurred_at: order?.occurred_at ?? today(),
+        // Arrives as UTC; the input shows business time, so it is converted on
+        // the way in as well as on the way out.
+        occurred_at: order ? toBusinessInputValue(`${order.occurred_at}:00Z`) : now(),
         items: (order?.items ?? [{ ...emptyLine }]) as OrderLineValues[],
         is_paid: order?.is_paid ?? true,
         amount_paid: order?.amount_paid ?? '',
@@ -121,6 +126,14 @@ export default function OrderForm({ items, transactionTypes, order, blockedReaso
         if (isLocked) {
             return;
         }
+
+        // The date field works in business time, but timestamps are stored in
+        // UTC. Converting here rather than in setData keeps the input showing
+        // what was typed; transform only rewrites what is sent.
+        transform((payload) => ({
+            ...payload,
+            occurred_at: businessInputToUtc(payload.occurred_at),
+        }));
 
         if (isEditing) {
             // Correcting rebuilds the sale server-side and redirects to the
@@ -306,15 +319,21 @@ export default function OrderForm({ items, transactionTypes, order, blockedReaso
                         </div>
 
                         <div className="grid gap-2 sm:max-w-xs">
-                            <Label htmlFor="occurred_at">Sale date</Label>
+                            <Label htmlFor="occurred_at">Sale date and time</Label>
                             <Input
                                 id="occurred_at"
                                 className="block"
-                                type="date"
+                                type="datetime-local"
                                 value={data.occurred_at}
                                 onChange={(e) => setData('occurred_at', e.target.value)}
+                                // Stops the picker offering a future moment.
+                                // The server rejects one regardless.
+                                max={now()}
                                 required
                             />
+                            <p className="text-muted-foreground text-xs">
+                                When the sale happened, which may be earlier than when it is being entered.
+                            </p>
                             <InputError message={errors.occurred_at} />
                         </div>
 

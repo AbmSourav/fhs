@@ -1,6 +1,7 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatDateTime } from '@/lib/datetime';
 import { type Order } from '@/types/order';
 import { Link } from '@inertiajs/react';
 import { type VariantProps } from 'class-variance-authority';
@@ -14,13 +15,9 @@ const currency = new Intl.NumberFormat('en-BD', {
     maximumFractionDigits: 0,
 });
 
-// en-GB puts the day before the month, giving "Wed 29 Jul 2026".
-const date = new Intl.DateTimeFormat('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-});
+// Shown in business time: stored timestamps are UTC, so leaving it to the
+// browser would render the same sale differently in another timezone.
+const date = formatDateTime;
 
 /** Taken from the Badge itself, so adding a variant there needs no change here. */
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>;
