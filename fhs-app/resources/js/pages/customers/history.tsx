@@ -124,7 +124,7 @@ export default function CustomerHistory({ customer }: { customer: CustomerProfil
                 ) : (
                     /* The border runs down the left as the timeline spine; each
                        entry hangs its own marker on it. */
-                    <ol className="mt-4 ml-4 w-full space-y-6 border-l border-border pl-6 lg:w-xl">
+                    <ol className="mt-4 sm:ml-4 w-[93%] space-y-6 border-l border-border pl-6 lg:w-xl">
                         {customer.timeline.map((entry) =>
                             entry.kind === 'sale' ? (
                                 <SaleEntry key={`sale-${entry.id}`} entry={entry} />

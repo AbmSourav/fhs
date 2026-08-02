@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\StatisticsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -52,6 +53,8 @@ Route::middleware(['auth'])->group(function () {
         // full Inertia page.
         Route::get('orders/customer-lookup', [OrderController::class, 'lookupCustomer'])
             ->name('orders.customer-lookup');
+
+        Route::get('statistics', StatisticsController::class)->name('statistics');
 
         Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
         Route::get('expenses/add', [ExpenseController::class, 'create'])->name('expenses.create');

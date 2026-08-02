@@ -12,10 +12,12 @@ class DashboardController extends Controller
         private readonly DashboardService $dashboard,
     ) {}
 
+    /** This month's trading, and how it got here. */
     public function __invoke(): Response
     {
         return Inertia::render('dashboard', [
-            'position' => $this->dashboard->allTimePosition(),
+            'month'  => $this->dashboard->monthlyFigures(),
+            'trends' => $this->dashboard->trends(),
         ]);
     }
 }

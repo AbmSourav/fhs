@@ -187,6 +187,16 @@ class DashboardStatisticsTest extends TestCase
         $this->assertSame(3000.0, $this->dashboard->allTimePosition()['revenue']);
     }
 
+    public function test_sales_are_counted_across_the_whole_life_of_the_business(): void
+    {
+        $this->buyStock();
+        $this->sell('swap', 1400);
+        $this->sell('swap', 1600);
+
+        // Counted on orders, so a sale with several lines still counts once.
+        $this->assertSame(2, $this->dashboard->allTimePosition()['sales_count']);
+    }
+
     public function test_a_failed_order_is_excluded_from_every_figure(): void
     {
         $this->buyStock();
@@ -199,6 +209,7 @@ class DashboardStatisticsTest extends TestCase
         // A failed sale never happened: it earned nothing and cost nothing,
         // and the goods are still on the shelf.
         $this->assertSame(0.0, $position['revenue']);
+        $this->assertSame(0, $position['sales_count']);
         $this->assertSame(0.0, $position['cogs']);
         $this->assertSame(8000.0, $position['stock_value']);
     }
@@ -290,16 +301,16 @@ class DashboardStatisticsTest extends TestCase
         $this->assertSame(0.0, $this->dashboard->allTimePosition()['stock_value']);
     }
 
-    public function test_the_dashboard_passes_the_position_to_the_page(): void
+    public function test_the_statistics_page_receives_the_position(): void
     {
         $this->buyStock();
         $this->sell('swap', 1400);
 
         $this->actingAs($this->user)
-            ->get('/dashboard')
+            ->get('/statistics')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->component('dashboard')
+                ->component('statistics/index')
                 ->where('position.revenue', 1400)
                 ->where('position.cogs', 800)
                 ->where('position.gross_profit', 600)
@@ -307,12 +318,23 @@ class DashboardStatisticsTest extends TestCase
             );
     }
 
+    public function test_statistics_are_admin_only(): void
+    {
+        $outsider = User::factory()->create();
+
+        // Revenue and margin are on this page, so it is gated like every other
+        // feature route — unlike the dashboard, which everyone lands on.
+        $this->actingAs($outsider)
+            ->get('/statistics')
+            ->assertForbidden();
+    }
+
     public function test_a_non_admin_still_sees_the_dashboard(): void
     {
         $outsider = User::factory()->create();
 
-        // Unlike every other feature page, the dashboard is not admin-only —
-        // it is where everyone lands after logging in.
+        // The dashboard is where everyone lands after logging in, so gating it
+        // would 403 a non-admin immediately after sign-in.
         $this->actingAs($outsider)
             ->get('/dashboard')
             ->assertOk();

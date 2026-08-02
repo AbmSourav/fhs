@@ -1,3 +1,56 @@
+/** Which way a figure moved since the month before. */
+export type DeltaDirection = 'up' | 'down' | 'flat' | 'new';
+
+/** One figure, with how it compares to last month. */
+export interface Metric {
+    current: number;
+    previous: number;
+    delta: number;
+    /** Null when last month was zero — a percentage against zero is undefined. */
+    percent: number | null;
+    direction: DeltaDirection;
+}
+
+/** This calendar month's trading, against the month before it. */
+export interface MonthlyFigures {
+    month_label: string;
+    previous_month_label: string;
+    revenue: Metric;
+    sales_count: Metric;
+    gross_profit: Metric;
+    average_order: Metric;
+    /** Money received this month, whichever month the sale was in. */
+    collected: Metric;
+}
+
+/**
+ * One month on a trend chart.
+ *
+ * Every bucket is present even when nothing happened — a quiet month is a real
+ * data point, and dropping it would silently shorten the axis.
+ */
+export interface MonthlyPoint {
+    label: string;
+    revenue: number;
+    /** Cash received that month, whichever month the sale was in. */
+    collected: number;
+    /** Units sold where the cylinder came back. */
+    swap: number;
+    /** Units where the customer kept it. */
+    outright: number;
+}
+
+/** One day of the month in progress. */
+export interface DailyPoint {
+    label: string;
+    revenue: number;
+}
+
+export interface Trends {
+    monthly: MonthlyPoint[];
+    daily: DailyPoint[];
+}
+
 /**
  * Life-of-the-business totals.
  *
@@ -7,6 +60,8 @@
 export interface AllTimePosition {
     /** Everything ever billed to customers. */
     revenue: number;
+    /** Sales recorded, excluding failed ones. A count, not money. */
+    sales_count: number;
     /** What the goods sold actually cost, frozen at the moment of each sale. */
     cogs: number;
     /** Non-stock spending — fuel, wages, rent. */
