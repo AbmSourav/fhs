@@ -105,21 +105,12 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
                             )}
                         </dl>
 
-                        {(purchase.transport_cost > 0 || purchase.other_cost > 0) && (
+                        {purchase.transport_cost > 0 && (
                             <dl className="mt-5 flex flex-wrap gap-x-6 gap-y-5 text-sm">
-                                {purchase.transport_cost > 0 && (
-                                    <div>
-                                        <dt className="text-muted-foreground text-xs">Transport</dt>
-                                        <dd className="mt-0.5 font-medium tabular-nums">{currency.format(purchase.transport_cost)}</dd>
-                                    </div>
-                                )}
-
-                                {purchase.other_cost > 0 && (
-                                    <div>
-                                        <dt className="text-muted-foreground text-xs">Other</dt>
-                                        <dd className="mt-0.5 font-medium tabular-nums">{currency.format(purchase.other_cost)}</dd>
-                                    </div>
-                                )}
+                                <div>
+                                    <dt className="text-muted-foreground text-xs">Transport</dt>
+                                    <dd className="mt-0.5 font-medium tabular-nums">{currency.format(purchase.transport_cost)}</dd>
+                                </div>
                             </dl>
                         )}
 

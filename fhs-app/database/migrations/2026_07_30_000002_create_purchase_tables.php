@@ -49,8 +49,10 @@ return new class extends Migration
             $table->decimal('shell_unit_cost', 14, 2)->default(0);
             $table->decimal('gas_unit_cost', 14, 2)->default(0);
 
+            // Anything else spent belongs in `expenses`, which is the single
+            // record of spending. Transport stays here because it is part of
+            // what this consignment cost to land.
             $table->decimal('transport_cost', 14, 2)->default(0)->comment('whole consignment');
-            $table->decimal('other_cost', 14, 2)->default(0);
 
             $table->string('invoice_ref')->nullable();
             $table->timestamp('purchased_at')->index();
@@ -73,7 +75,6 @@ return new class extends Migration
             $table->integer('quantity');
             $table->decimal('unit_cost', 14, 2);
             $table->decimal('transport_cost', 14, 2)->default(0);
-            $table->decimal('other_cost', 14, 2)->default(0);
             $table->string('invoice_ref')->nullable();
             $table->timestamp('purchased_at')->index();
             $table->foreignId('recorded_by')->constrained('users');

@@ -49,7 +49,6 @@ export default function InventoryForm({ items, purchase, kind, blockedReason }: 
         quantity: purchase?.quantity ?? '',
         unit_cost: purchase?.unit_cost ?? '',
         transport_cost: purchase?.transport_cost ?? '',
-        other_cost: purchase?.other_cost ?? '',
     });
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -314,39 +313,23 @@ export default function InventoryForm({ items, purchase, kind, blockedReason }: 
                             </div>
                         )}
 
-                        <div className="grid gap-6 sm:grid-cols-2">
-                            <div className="grid gap-2">
-                                <Label htmlFor="transport_cost">
-                                    Transport <span className="text-muted-foreground font-normal">(optional)</span>
-                                </Label>
-                                <Input
-                                    id="transport_cost"
-                                    type="text"
-                                    step="0.01"
-                                    min="0"
-                                    value={data.transport_cost}
-                                    onChange={(e) => setData('transport_cost', e.target.value)}
-                                    placeholder="0.00"
-                                />
-                                <p className="text-muted-foreground text-xs">For the whole consignment, not per unit.</p>
-                                <InputError message={errors.transport_cost} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="other_cost">
-                                    Other costs <span className="text-muted-foreground font-normal">(optional)</span>
-                                </Label>
-                                <Input
-                                    id="other_cost"
-                                    type="text"
-                                    step="0.01"
-                                    min="0"
-                                    value={data.other_cost}
-                                    onChange={(e) => setData('other_cost', e.target.value)}
-                                    placeholder="0.00"
-                                />
-                                <InputError message={errors.other_cost} />
-                            </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="transport_cost">
+                                Transport <span className="text-muted-foreground font-normal">(optional)</span>
+                            </Label>
+                            <Input
+                                id="transport_cost"
+                                type="text"
+                                step="0.01"
+                                min="0"
+                                value={data.transport_cost}
+                                onChange={(e) => setData('transport_cost', e.target.value)}
+                                placeholder="0.00"
+                            />
+                            <p className="text-muted-foreground text-xs">
+                                For the whole consignment, not per unit. Anything else spent goes in Other Expenses.
+                            </p>
+                            <InputError message={errors.transport_cost} />
                         </div>
 
                         <div className="grid gap-2">

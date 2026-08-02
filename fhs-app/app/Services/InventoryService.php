@@ -43,7 +43,6 @@ class InventoryService
             // yet must not count toward what is on the shelf.
             'purchased_at'   => ['required', 'date', 'before_or_equal:today'],
             'transport_cost' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
-            'other_cost'     => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
 
             // Gas purchases: shells and gas are counted and costed separately.
             // swap_catalogue_id says whose empties were sent, and so whether
@@ -179,7 +178,6 @@ class InventoryService
             'shell_unit_cost'   => $data['shell_unit_cost'] ?? 0,
             'gas_unit_cost'     => $data['gas_unit_cost'] ?? 0,
             'transport_cost'    => $data['transport_cost'] ?? 0,
-            'other_cost'        => $data['other_cost'] ?? 0,
             'invoice_ref'       => $data['invoice_ref'] ?? null,
             'purchased_at'      => $data['purchased_at'],
             'recorded_by'       => $recordedBy,
@@ -308,7 +306,6 @@ class InventoryService
             'quantity'       => $quantity,
             'unit_cost'      => $data['unit_cost'] ?? 0,
             'transport_cost' => $data['transport_cost'] ?? 0,
-            'other_cost'     => $data['other_cost'] ?? 0,
             'invoice_ref'    => $data['invoice_ref'] ?? null,
             'purchased_at'   => $data['purchased_at'],
             'recorded_by'    => $recordedBy,
@@ -414,7 +411,6 @@ class InventoryService
             'shell_unit_cost' => (float) $purchase->shell_unit_cost,
             'unit_cost'       => (float) $purchase->gas_unit_cost,
             'transport_cost'  => (float) $purchase->transport_cost,
-            'other_cost'      => (float) $purchase->other_cost,
             'total_cost'      => $purchase->totalCost(),
         ];
     }
@@ -444,7 +440,6 @@ class InventoryService
             'shell_unit_cost' => 0.0,
             'unit_cost'       => (float) $purchase->unit_cost,
             'transport_cost'  => (float) $purchase->transport_cost,
-            'other_cost'      => (float) $purchase->other_cost,
             'total_cost'      => $purchase->totalCost(),
         ];
     }
@@ -501,7 +496,6 @@ class InventoryService
             'unit_cost' => $isGas ? '' : $this->formatCost($purchase->unit_cost),
 
             'transport_cost' => $this->formatCost($purchase->transport_cost),
-            'other_cost'     => $this->formatCost($purchase->other_cost),
 
             'edits_used'     => $purchase->editCount(),
             'edits_allowed'  => $purchase::MAX_EDITS,

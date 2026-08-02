@@ -32,7 +32,6 @@ export interface InventoryPurchase {
     unit_cost: number;
     /** For the whole consignment, not per unit. */
     transport_cost: number;
-    other_cost: number;
     /** Derived, never stored: units x cost, plus transport and other costs. */
     total_cost: number;
 }
@@ -69,7 +68,6 @@ export interface PurchaseFormValues {
     quantity: string;
     unit_cost: string;
     transport_cost: string;
-    other_cost: string;
     /** Corrections already made, against the limit. */
     edits_used: number;
     edits_allowed: number;

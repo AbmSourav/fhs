@@ -30,7 +30,6 @@ class GasInventoryPurchase extends Model
         'shell_unit_cost',
         'gas_unit_cost',
         'transport_cost',
-        'other_cost',
         'invoice_ref',
         'purchased_at',
         'recorded_by',
@@ -44,7 +43,6 @@ class GasInventoryPurchase extends Model
             'shell_unit_cost' => 'decimal:2',
             'gas_unit_cost'   => 'decimal:2',
             'transport_cost'  => 'decimal:2',
-            'other_cost'      => 'decimal:2',
             'purchased_at'    => 'datetime',
         ];
     }
@@ -105,8 +103,7 @@ class GasInventoryPurchase extends Model
     {
         return (float) $this->shell_unit_cost * ($this->filled_quantity + $this->empty_quantity)
             + (float) $this->gas_unit_cost * $this->filled_quantity
-            + (float) $this->transport_cost
-            + (float) $this->other_cost;
+            + (float) $this->transport_cost;
     }
 
     /** Shells acquired by this purchase. A swap acquires none. */

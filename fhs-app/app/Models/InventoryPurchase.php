@@ -25,7 +25,6 @@ class InventoryPurchase extends Model
         'quantity',
         'unit_cost',
         'transport_cost',
-        'other_cost',
         'invoice_ref',
         'purchased_at',
         'recorded_by',
@@ -37,7 +36,6 @@ class InventoryPurchase extends Model
             'quantity'       => 'integer',
             'unit_cost'      => 'decimal:2',
             'transport_cost' => 'decimal:2',
-            'other_cost'     => 'decimal:2',
             'purchased_at'   => 'datetime',
         ];
     }
@@ -61,7 +59,6 @@ class InventoryPurchase extends Model
     public function totalCost(): float
     {
         return (float) $this->unit_cost * $this->quantity
-            + (float) $this->transport_cost
-            + (float) $this->other_cost;
+            + (float) $this->transport_cost;
     }
 }
