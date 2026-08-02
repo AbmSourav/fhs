@@ -3,6 +3,7 @@
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\CatalogueController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +53,13 @@ Route::middleware(['auth'])->group(function () {
         // full Inertia page.
         Route::get('orders/customer-lookup', [OrderController::class, 'lookupCustomer'])
             ->name('orders.customer-lookup');
+
+        Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
+        Route::get('expenses/add', [ExpenseController::class, 'create'])->name('expenses.create');
+        Route::post('expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+        Route::get('expenses/edit/{expense}', [ExpenseController::class, 'edit'])->name('expenses.edit');
+        Route::patch('expenses/update/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+        Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
         Route::post('brands', [BrandController::class, 'store'])->name('brands.store');
     });

@@ -1113,7 +1113,7 @@ class OrderRecordingTest extends TestCase
         // Settling in full is the common case, so this prefills the field.
         $this->assertSame(1000.0, $form['due_amount']);
         $this->assertCount(1, $form['payments']);
-        $this->assertSame('Mobile payment', $form['payments'][0]['method']);
+        $this->assertSame('MFS', $form['payments'][0]['method']);
     }
 
     public function test_every_transaction_type_is_offered_to_the_line_picker(): void

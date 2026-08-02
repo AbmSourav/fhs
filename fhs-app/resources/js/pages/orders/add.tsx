@@ -310,7 +310,7 @@ export default function OrderForm({ items, transactionTypes, order, blockedReaso
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="cash">Cash</SelectItem>
-                                            <SelectItem value="mobile">Mobile payment</SelectItem>
+                                            <SelectItem value="mobile">MFS</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <InputError message={errors.payment_method} />

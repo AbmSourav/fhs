@@ -114,7 +114,7 @@ export default function OrderPay({ order }: { order: OrderPayment }) {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="cash">Cash</SelectItem>
-                                        <SelectItem value="mobile">Mobile payment</SelectItem>
+                                        <SelectItem value="mobile">MFS</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <InputError message={errors.method} />
