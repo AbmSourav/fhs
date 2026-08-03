@@ -12,6 +12,7 @@ use App\Models\Payment;
 use App\Support\BusinessCalendar;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Summarising the business for the dashboard.
@@ -82,6 +83,7 @@ class DashboardService
             'average_order' => $this->withDelta($current['average_order'], $previous['average_order']),
             'collected'     => $this->withDelta($current['collected'], $previous['collected']),
             'expenses'      => $this->withDelta($current['expenses'], $previous['expenses']),
+            'net_profit'    => $this->withDelta($current['net_profit'], $previous['net_profit']),
         ];
     }
 
@@ -108,9 +110,10 @@ class DashboardService
         $revenue = $this->revenueRows($span['start'], $span['end']);
         $payments = $this->paymentRows($span['start'], $span['end']);
         $mix = $this->transactionRows($span['start'], $span['end']);
+        $expenses = $this->expenseRows($span['start'], $span['end']);
 
         return [
-            'monthly' => $this->buildMonthlySeries($monthly, $revenue, $payments, $mix),
+            'monthly' => $this->buildMonthlySeries($monthly, $revenue, $payments, $mix, $expenses),
             'daily'   => $this->buildDailySeries($daily, $revenue),
         ];
     }
@@ -123,15 +126,25 @@ class DashboardService
      *
      * @return array<int, array<string, mixed>>
      */
-    private function buildMonthlySeries(array $months, array $revenue, array $payments, array $mix): array
+    private function buildMonthlySeries(array $months, array $revenue, array $payments, array $mix, array $expenses): array
     {
-        return array_map(fn (array $month) => [
-            'label'     => $month['label'],
-            'revenue'   => $this->sumWithin($revenue, $month['start'], $month['end'], 'amount'),
-            'collected' => $this->sumWithin($payments, $month['start'], $month['end'], 'amount'),
-            'swap'      => $this->sumWithin($mix, $month['start'], $month['end'], 'swap'),
-            'outright'  => $this->sumWithin($mix, $month['start'], $month['end'], 'outright'),
-        ], $months);
+        return array_map(function (array $month) use ($revenue, $payments, $mix, $expenses) {
+            $billed = $this->sumWithin($revenue, $month['start'], $month['end'], 'amount');
+            $cost = $this->sumWithin($revenue, $month['start'], $month['end'], 'cost');
+            $spent = $this->sumWithin($expenses, $month['start'], $month['end'], 'amount');
+
+            return [
+                'label'     => $month['label'],
+                'revenue'   => $billed,
+                'collected' => $this->sumWithin($payments, $month['start'], $month['end'], 'amount'),
+                'swap'      => $this->sumWithin($mix, $month['start'], $month['end'], 'swap'),
+                'outright'  => $this->sumWithin($mix, $month['start'], $month['end'], 'outright'),
+                'expenses'  => $spent,
+                // Negative in a month that spent more than it made, which is
+                // the point of charting it — a loss should be visible as one.
+                'net_profit' => round($billed - $cost - $spent, 2),
+            ];
+        }, $months);
     }
 
     /**
@@ -169,7 +182,11 @@ class DashboardService
     /**
      * Sale lines with when they happened, already totalled per order.
      *
-     * @return array<int, array{at: CarbonImmutable, amount: float}>
+     * Carries cost alongside revenue so a bucket can show what it actually
+     * made. Both come off the same order, so they cannot drift into different
+     * months the way revenue and a late payment can.
+     *
+     * @return array<int, array{at: CarbonImmutable, amount: float, cost: float}>
      */
     private function revenueRows(CarbonImmutable $start, CarbonImmutable $end): array
     {
@@ -178,12 +195,55 @@ class DashboardService
             ->where('occurred_at', '>=', $start)
             ->where('occurred_at', '<', $end)
             ->withSum('items as revenue', 'line_total')
+            // The cost frozen at the moment of sale, so a later purchase at a
+            // different price cannot rewrite a month already reported.
+            ->withSum('items as cost', DB::raw('unit_cost * quantity'))
             ->get(['id', 'occurred_at'])
             ->map(fn (Order $order) => [
                 'at'     => CarbonImmutable::parse($order->occurred_at),
                 'amount' => (float) $order->revenue,
+                'cost'   => (float) $order->cost,
             ])
             ->all();
+    }
+
+    /**
+     * Money spent that is not the goods themselves, with when it went out.
+     *
+     * Three sources merged into one stream: the expenses table, and transport
+     * on each of the two purchase tables. Same reasoning as otherExpenses() —
+     * delivery is recorded on the purchase that caused it, but it is spending
+     * all the same.
+     *
+     * @return array<int, array{at: CarbonImmutable, amount: float}>
+     */
+    private function expenseRows(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        // Soft-deleted expenses are excluded by the model's global scope.
+        $recorded = Expense::query()
+            ->where('spent_at', '>=', $start)
+            ->where('spent_at', '<', $end)
+            ->get(['amount', 'spent_at'])
+            ->map(fn (Expense $expense) => [
+                'at'     => CarbonImmutable::parse($expense->spent_at),
+                'amount' => (float) $expense->amount,
+            ]);
+
+        // current() on both: a corrected purchase leaves its earlier versions
+        // in place, and counting those would charge the delivery twice.
+        $transport = collect([GasInventoryPurchase::class, InventoryPurchase::class])
+            ->flatMap(fn (string $model) => $model::query()
+                ->current()
+                ->where('purchased_at', '>=', $start)
+                ->where('purchased_at', '<', $end)
+                ->where('transport_cost', '>', 0)
+                ->get(['transport_cost', 'purchased_at'])
+                ->map(fn ($purchase) => [
+                    'at'     => CarbonImmutable::parse($purchase->purchased_at),
+                    'amount' => (float) $purchase->transport_cost,
+                ]));
+
+        return $recorded->concat($transport)->all();
     }
 
     /**
@@ -240,17 +300,24 @@ class DashboardService
     {
         $revenue = $this->revenue($start, $end);
         $salesCount = $this->salesCount($start, $end);
+        $grossProfit = round($revenue - $this->costOfGoodsSold($start, $end), 2);
+        // Keyed on when the money was spent, so a bill entered late still
+        // belongs to the month it was paid in.
+        $expenses = $this->otherExpenses($start, $end);
 
         return [
             'revenue'      => $revenue,
             'sales_count'  => $salesCount,
-            'gross_profit' => round($revenue - $this->costOfGoodsSold($start, $end), 2),
+            'gross_profit' => $grossProfit,
             // Whether a change in revenue came from more sales or bigger ones.
             'average_order' => $salesCount > 0 ? round($revenue / $salesCount, 2) : 0.0,
             'collected'     => $this->collected($start, $end),
-            // Keyed on when the money was spent, so a bill entered late still
-            // belongs to the month it was paid in.
-            'expenses' => $this->otherExpenses($start, $end),
+            'expenses'      => $expenses,
+            // What the month actually made once everything is taken off. Both
+            // halves are keyed to the same month but on different events — the
+            // sale for cost, the payment for expenses — so a month can show a
+            // healthy gross and still lose money.
+            'net_profit' => round($grossProfit - $expenses, 2),
         ];
     }
 

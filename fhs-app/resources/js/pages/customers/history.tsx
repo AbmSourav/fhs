@@ -277,7 +277,7 @@ function CallEntry({ entry }: { entry: TimelineCall }) {
             </div>
 
             <div className="mt-2 rounded-md border p-3 text-sm">
-                <p className="font-medium">{entry.outcome_label}</p>
+                <p className="text-muted-foreground font-medium">{entry.outcome_label}</p>
 
                 {entry.note && <p className="text-muted-foreground mt-1 text-xs">{entry.note}</p>}
 

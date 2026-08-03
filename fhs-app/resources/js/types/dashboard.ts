@@ -23,6 +23,8 @@ export interface MonthlyFigures {
     collected: Metric;
     /** Non-stock spending: the expenses table plus consignment transport. */
     expenses: Metric;
+    /** Gross profit less expenses. Negative in a month that overspent. */
+    net_profit: Metric;
 }
 
 /**
@@ -40,6 +42,10 @@ export interface MonthlyPoint {
     swap: number;
     /** Units where the customer kept it. */
     outright: number;
+    /** Non-stock spending that month. */
+    expenses: number;
+    /** Revenue less cost of goods sold less expenses. Negative on a loss. */
+    net_profit: number;
 }
 
 /** One day of the month in progress. */

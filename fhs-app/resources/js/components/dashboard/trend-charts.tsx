@@ -1,6 +1,6 @@
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { type DailyPoint, type MonthlyPoint } from '@/types/dashboard';
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
 const currency = new Intl.NumberFormat('en-BD', {
@@ -84,6 +84,44 @@ export function RevenueVsCollectedChart({ data }: { data: MonthlyPoint[] }) {
                     <Line dataKey="revenue" stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
                     <Line dataKey="collected" stroke="var(--color-collected)" strokeWidth={2} dot={false} />
                 </LineChart>
+            </ChartContainer>
+        </Panel>
+    );
+}
+
+const netProfitConfig = {
+    net_profit: { label: 'Net profit', color: 'var(--chart-2)' },
+} satisfies ChartConfig;
+
+/**
+ * What each month actually made, after cost of goods and expenses.
+ *
+ * Distinct from revenue: a busy month that bought heavily or paid a big bill
+ * can still lose money, and only this chart shows that.
+ */
+export function NetProfitTrendChart({ data }: { data: MonthlyPoint[] }) {
+    return (
+        <Panel title="Net profit by month" subtitle="After cost of goods and expenses">
+            <ChartContainer config={netProfitConfig} className="mt-4 h-[220px] w-full">
+                <BarChart data={data} accessibilityLayer>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis tickLine={false} axisLine={false} width={52} tickFormatter={shortCurrency} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(value) => currency.format(Number(value))} />} />
+                    {/* Without this the axis floats and a losing month is not
+                        obviously below zero. */}
+                    <ReferenceLine y={0} stroke="var(--border)" />
+                    <Bar dataKey="net_profit" radius={4}>
+                        {/* Coloured per bar: a loss is red, not a shorter green
+                            bar, so the sign reads at a glance. */}
+                        {data.map((point) => (
+                            <Cell
+                                key={point.label}
+                                fill={point.net_profit < 0 ? 'var(--destructive)' : 'var(--color-net_profit)'}
+                            />
+                        ))}
+                    </Bar>
+                </BarChart>
             </ChartContainer>
         </Panel>
     );

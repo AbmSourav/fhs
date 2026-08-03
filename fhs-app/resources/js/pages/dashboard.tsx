@@ -1,11 +1,11 @@
 import DeltaBadge from '@/components/dashboard/delta-badge';
 import StatCard from '@/components/dashboard/stat-card';
-import { DailyRevenueChart, RevenueTrendChart, TransactionMixChart } from '@/components/dashboard/trend-charts';
+import { DailyRevenueChart, NetProfitTrendChart, RevenueTrendChart, TransactionMixChart } from '@/components/dashboard/trend-charts';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type MonthlyFigures, type Trends } from '@/types/dashboard';
 import { Head } from '@inertiajs/react';
-import { Banknote, Package, Receipt, ShoppingBag, TrendingUp, Wallet } from 'lucide-react';
+import { Banknote, Coins, Package, Receipt, ShoppingBag, TrendingUp, Wallet } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 
@@ -27,7 +27,7 @@ export default function Dashboard({ month, trends }: Props) {
                     <p className="text-muted-foreground mt-1 text-sm">This month so far, against {against}</p>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-7">
                     <StatCard
                         label="Revenue"
                         value={month.revenue.current}
@@ -61,13 +61,29 @@ export default function Dashboard({ month, trends }: Props) {
                             every other card in this row. */}
                         <DeltaBadge metric={month.expenses} against={against} goodDirection="down" />
                     </StatCard>
+
+                    {/* What the month actually made. Tinted by sign, since this
+                        is the one figure here that can legitimately go
+                        negative. */}
+                    <StatCard
+                        label="Net profit"
+                        value={month.net_profit.current}
+                        icon={Coins}
+                        hint="After goods and expenses"
+                        tone={month.net_profit.current < 0 ? 'negative' : 'positive'}
+                    >
+                        <DeltaBadge metric={month.net_profit} against={against} />
+                    </StatCard>
                 </div>
 
                 <h2 className="text-muted-foreground mt-9 text-xs font-medium tracking-wide uppercase">Trends</h2>
 
                 <div className="mt-3 grid gap-4 grid-cols-1 sm:grid-cols-2">
                     <RevenueTrendChart data={trends.monthly} />
-                    <TransactionMixChart data={trends.monthly} />
+                    {/* Next to revenue on purpose: the gap between the two is
+                        what the business spent to earn it. */}
+                    <NetProfitTrendChart data={trends.monthly} />
+                    {/* <TransactionMixChart data={trends.monthly} /> */}
                     <DailyRevenueChart data={trends.daily} month={month.month_label} />
                 </div>
             </div>

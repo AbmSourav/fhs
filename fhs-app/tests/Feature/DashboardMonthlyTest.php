@@ -282,6 +282,138 @@ class DashboardMonthlyTest extends TestCase
         $this->assertSame(450.0, $this->dashboard->monthlyFigures()['expenses']['current']);
     }
 
+    public function test_net_profit_takes_expenses_off_the_gross(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        // Gas cost 800, so a swap at 1400 leaves 600 gross.
+        $this->sellAt('2026-08-10 06:00:00');
+
+        app(ExpenseService::class)->record([
+            'category'       => 'transport',
+            'description'    => 'Van diesel',
+            'amount'         => 250,
+            'payment_method' => 'cash',
+            'spent_at'       => '2026-08-11 06:00:00',
+        ], $this->user->id);
+
+        $month = $this->dashboard->monthlyFigures();
+
+        $this->assertSame(600.0, $month['gross_profit']['current']);
+        $this->assertSame(250.0, $month['expenses']['current']);
+        $this->assertSame(350.0, $month['net_profit']['current']);
+    }
+
+    public function test_a_month_that_overspends_reports_a_loss(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-08-10 06:00:00');
+
+        // Rent dwarfs a single sale, which is exactly the case the figure
+        // exists to surface: busy does not mean profitable.
+        app(ExpenseService::class)->record([
+            'category'       => 'rent',
+            'description'    => 'Shop rent',
+            'amount'         => 5000,
+            'payment_method' => 'cash',
+            'spent_at'       => '2026-08-02 06:00:00',
+        ], $this->user->id);
+
+        $this->assertSame(-4400.0, $this->dashboard->monthlyFigures()['net_profit']['current']);
+    }
+
+    public function test_net_profit_counts_consignment_transport(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-08-10 06:00:00');
+
+        // Recorded on the purchase rather than in the expenses table, but it
+        // is money out and must reach the bottom line.
+        app(InventoryService::class)->record([
+            'catalogue_id'    => $this->cylinder->id,
+            'purchased_at'    => '2026-08-08 06:00:00',
+            'filled_quantity' => 10,
+            'gas_unit_cost'   => 800,
+            'transport_cost'  => 450,
+        ], $this->user->id);
+
+        $this->assertSame(150.0, $this->dashboard->monthlyFigures()['net_profit']['current']);
+    }
+
+    public function test_buying_stock_does_not_by_itself_reduce_net_profit(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-08-10 06:00:00');
+
+        // A consignment with no transport charge. Buying stock converts money
+        // into goods rather than spending it, so the month's profit is
+        // unchanged — the cost lands when the goods sell.
+        app(InventoryService::class)->record([
+            'catalogue_id'    => $this->cylinder->id,
+            'purchased_at'    => '2026-08-09 06:00:00',
+            'filled_quantity' => 100,
+            'gas_unit_cost'   => 800,
+        ], $this->user->id);
+
+        $this->assertSame(600.0, $this->dashboard->monthlyFigures()['net_profit']['current']);
+    }
+
+    public function test_net_profit_is_compared_against_the_month_before(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-08-10 06:00:00');
+        $this->sellAt('2026-07-10 06:00:00');
+        $this->sellAt('2026-07-12 06:00:00');
+
+        $netProfit = $this->dashboard->monthlyFigures()['net_profit'];
+
+        // 600 this month against 1200 last: halved, and reported as a fall.
+        $this->assertSame(600.0, $netProfit['current']);
+        $this->assertSame(1200.0, $netProfit['previous']);
+        $this->assertSame(-600.0, $netProfit['delta']);
+        $this->assertSame('down', $netProfit['direction']);
+    }
+
+    public function test_the_monthly_series_carries_net_profit(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-08-10 06:00:00');
+
+        app(ExpenseService::class)->record([
+            'category'       => 'transport',
+            'description'    => 'Van diesel',
+            'amount'         => 100,
+            'payment_method' => 'cash',
+            'spent_at'       => '2026-08-11 06:00:00',
+        ], $this->user->id);
+
+        $monthly = $this->dashboard->trends()['monthly'];
+
+        $this->assertSame(100.0, $monthly[11]['expenses']);
+        $this->assertSame(500.0, $monthly[11]['net_profit']);
+        // A month with nothing in it is flat, not absent.
+        $this->assertSame(0.0, $monthly[10]['net_profit']);
+    }
+
+    public function test_the_series_keys_net_profit_to_the_month_it_happened(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        // Just after midnight Dhaka on 1 August, which is still July in UTC.
+        // The whole reason BusinessCalendar exists.
+        $this->sellAt('2026-07-31 20:00:00');
+
+        $monthly = $this->dashboard->trends()['monthly'];
+
+        $this->assertSame(600.0, $monthly[11]['net_profit']);
+        $this->assertSame(0.0, $monthly[10]['net_profit']);
+    }
+
     public function test_a_failed_order_is_excluded_from_the_month(): void
     {
         Carbon::setTestNow('2026-08-15 12:00:00');
