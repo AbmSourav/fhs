@@ -10,6 +10,7 @@ use App\Models\CustomerFollowUp;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\CrmService;
+use App\Services\CustomerService;
 use App\Services\InventoryService;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -371,7 +372,9 @@ class CrmListTest extends TestCase
 
         $this->actingAs($this->user)->post("/crm/{$customer->id}/call");
 
-        $this->assertNotNull($this->crm->paginate('due')->items()[0]['last_called_at']);
+        // Read off 'repeat' rather than 'due': calling them removes them from
+        // the refill list by design, so 'due' has nothing left to assert on.
+        $this->assertNotNull($this->crm->paginate('repeat', minOrders: 1)->items()[0]['last_called_at']);
     }
 
     public function test_calling_is_admin_only(): void
@@ -393,5 +396,262 @@ class CrmListTest extends TestCase
         $this->actingAs($outsider)
             ->get('/crm')
             ->assertForbidden();
+    }
+
+    /** A call to a customer, a given number of days ago. */
+    private function callTo(string $mobile, int $daysAgo): void
+    {
+        CustomerFollowUp::create([
+            'customer_id' => Customer::where('mobile_number', $mobile)->value('id'),
+            'called_by'   => $this->user->id,
+            'outcome'     => FollowUpOutcome::NoAnswer,
+            'called_at'   => now()->subDays($daysAgo),
+        ]);
+    }
+
+    public function test_the_refill_list_drops_anyone_already_called_in_the_window(): void
+    {
+        $this->sellTo('01700000001', 'Called', 25);
+        $this->sellTo('01700000002', 'Not called', 25);
+
+        // Chased five days ago about this same refill, so calling again would
+        // be the second call about one purchase.
+        $this->callTo('01700000001', 5);
+
+        $this->assertSame(['Not called'], $this->namesOn('due'));
+    }
+
+    public function test_a_call_older_than_the_window_does_not_hold_a_customer_back(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 40);
+
+        // The call predates the window, so it was about an earlier refill and
+        // says nothing about this one.
+        $this->callTo('01700000001', 25);
+
+        $this->assertSame(['Overdue'], $this->namesOn('due'));
+    }
+
+    public function test_the_call_exclusion_follows_the_chosen_window(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 40);
+        $this->callTo('01700000001', 25);
+
+        // Same call, two windows: inside 30 days it suppresses them, inside
+        // 20 it is too old to count.
+        $this->assertSame([], $this->namesOn('due', days: 30));
+        $this->assertSame(['Overdue'], $this->namesOn('due', days: 20));
+    }
+
+    public function test_a_recent_call_does_not_hide_a_lapsed_customer(): void
+    {
+        $this->sellTo('01700000001', 'Long gone', 200);
+
+        // Being called did not bring them back, so they are still lapsed —
+        // dropping them would hide whoever most needs chasing.
+        $this->callTo('01700000001', 2);
+
+        $this->assertSame(['Long gone'], $this->namesOn('lapsed'));
+    }
+
+    /** A call promising a callback on a given day. */
+    private function promiseCallback(string $mobile, ?int $inDays, int $calledDaysAgo = 1): void
+    {
+        CustomerFollowUp::create([
+            'customer_id'   => Customer::where('mobile_number', $mobile)->value('id'),
+            'called_by'     => $this->user->id,
+            'outcome'       => FollowUpOutcome::WillBuyLater,
+            'called_at'     => now()->subDays($calledDaysAgo),
+            'call_again_on' => $inDays !== null ? now()->addDays($inDays)->toDateString() : null,
+        ]);
+    }
+
+    public function test_the_follow_up_list_holds_only_promised_callbacks(): void
+    {
+        $this->sellTo('01700000001', 'Promised', 25);
+        $this->sellTo('01700000002', 'Called, nothing promised', 25);
+        $this->sellTo('01700000003', 'Never called', 25);
+
+        $this->promiseCallback('01700000001', inDays: 1);
+        $this->callTo('01700000002', 1);
+
+        $this->assertSame(['Promised'], $this->namesOn('follow_up'));
+    }
+
+    public function test_the_follow_up_window_counts_forward(): void
+    {
+        $this->sellTo('01700000001', 'Tomorrow', 25);
+        $this->sellTo('01700000002', 'Next week', 25);
+
+        $this->promiseCallback('01700000001', inDays: 1);
+        $this->promiseCallback('01700000002', inDays: 7);
+
+        // Two days means today and tomorrow, so next week's is not yet due.
+        $this->assertSame(['Tomorrow'], $this->namesOn('follow_up'));
+
+        // Widen the window and it comes into view.
+        $this->assertSame(['Tomorrow', 'Next week'], $this->namesOn('follow_up', days: 8));
+    }
+
+    public function test_a_callback_promised_for_today_is_on_the_list(): void
+    {
+        $this->sellTo('01700000001', 'Today', 25);
+        $this->promiseCallback('01700000001', inDays: 0);
+
+        // Even at the narrowest window: today is always inside "the next day".
+        $this->assertSame(['Today'], $this->namesOn('follow_up', days: 1));
+    }
+
+    public function test_an_overdue_callback_stays_on_the_list(): void
+    {
+        $this->sellTo('01700000001', 'Missed', 25);
+
+        // Promised for last week and never honoured. A missed callback does not
+        // stop being owed, so no window should hide it.
+        $this->promiseCallback('01700000001', inDays: -7, calledDaysAgo: 10);
+
+        $this->assertSame(['Missed'], $this->namesOn('follow_up', days: 1));
+    }
+
+    public function test_the_follow_up_list_puts_the_soonest_first(): void
+    {
+        $this->sellTo('01700000001', 'Later', 25);
+        $this->sellTo('01700000002', 'Overdue', 25);
+        $this->sellTo('01700000003', 'Sooner', 25);
+
+        $this->promiseCallback('01700000001', inDays: 5);
+        $this->promiseCallback('01700000002', inDays: -3, calledDaysAgo: 10);
+        $this->promiseCallback('01700000003', inDays: 2);
+
+        // Anything already overdue leads, then by how soon it falls due.
+        $this->assertSame(['Overdue', 'Sooner', 'Later'], $this->namesOn('follow_up', days: 10));
+    }
+
+    public function test_calling_a_customer_again_settles_the_callback(): void
+    {
+        $this->sellTo('01700000001', 'Promised', 25);
+        $this->promiseCallback('01700000001', inDays: 1, calledDaysAgo: 3);
+
+        $this->assertSame(['Promised'], $this->namesOn('follow_up'));
+
+        // The promise is honoured by ringing them, not by the date arriving.
+        $this->callTo('01700000001', 0);
+
+        $this->assertSame([], $this->namesOn('follow_up'));
+    }
+
+    public function test_the_follow_up_list_carries_the_promised_date(): void
+    {
+        $this->sellTo('01700000001', 'Promised', 25);
+        $this->promiseCallback('01700000001', inDays: 1);
+
+        $row = $this->crm->paginate('follow_up')->items()[0];
+
+        $this->assertNotNull($row['next_callback_on']);
+        $this->assertSame(now()->addDay()->toDateString(), $row['next_callback_on']->toDateString());
+    }
+
+    public function test_a_call_appears_on_the_customers_timeline(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        CustomerFollowUp::create([
+            'customer_id' => $customer->id,
+            'called_by'   => $this->user->id,
+            'outcome'     => FollowUpOutcome::WillBuyLater,
+            'note'        => 'Wants delivery after Eid',
+            'called_at'   => now()->subDays(3),
+        ]);
+
+        $timeline = app(CustomerService::class)->presentProfile($customer)['timeline'];
+
+        $call = collect($timeline)->firstWhere('kind', 'call');
+
+        $this->assertNotNull($call, 'The call should share the timeline with the sale.');
+        $this->assertSame('Will buy later', $call['outcome_label']);
+        $this->assertSame('Wants delivery after Eid', $call['note']);
+        $this->assertTrue($call['conclusive']);
+        $this->assertSame($this->user->name, $call['called_by']);
+    }
+
+    public function test_the_timeline_reads_in_order_across_sales_and_calls(): void
+    {
+        // Bought, was chased a fortnight later, then bought again — the whole
+        // point of putting calls on the same timeline as the sales.
+        $this->sellTo('01700000001', 'Regular', 30);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        CustomerFollowUp::create([
+            'customer_id' => $customer->id,
+            'called_by'   => $this->user->id,
+            'outcome'     => FollowUpOutcome::Ordered,
+            'called_at'   => now()->subDays(16),
+        ]);
+
+        $this->sellTo('01700000001', 'Regular', 15);
+
+        $kinds = collect(app(CustomerService::class)->presentProfile($customer)['timeline'])
+            ->pluck('kind')
+            ->all();
+
+        // Newest first: the second sale, the call that produced it, the first sale.
+        $this->assertSame(['sale', 'call', 'sale'], $kinds);
+    }
+
+    public function test_an_unanswered_call_is_not_marked_as_contact(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        CustomerFollowUp::create([
+            'customer_id' => $customer->id,
+            'called_by'   => $this->user->id,
+            'outcome'     => FollowUpOutcome::NoAnswer,
+            'called_at'   => now()->subDay(),
+        ]);
+
+        $call = collect(app(CustomerService::class)->presentProfile($customer)['timeline'])
+            ->firstWhere('kind', 'call');
+
+        $this->assertFalse($call['conclusive']);
+    }
+
+    public function test_history_opened_from_a_call_list_offers_a_way_back_to_it(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)
+            ->get("/customers/{$customer->id}/history?from=crm&filter=lapsed&days=60")
+            ->assertInertia(fn ($page) => $page
+                ->where('returnTo.label', 'Back to CRM')
+                // The filters survive the round trip, so the list is the same
+                // one they left.
+                ->where('returnTo.href', route('crm').'?filter=lapsed&days=60'));
+    }
+
+    public function test_history_opened_from_the_customer_book_goes_back_there(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)
+            ->get("/customers/{$customer->id}/history")
+            ->assertInertia(fn ($page) => $page
+                ->where('returnTo.label', 'Back to Customers')
+                ->where('returnTo.href', route('customers.index')));
+    }
+
+    public function test_the_return_link_cannot_be_pointed_off_site(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        // Only the filter controls are carried through, so nothing a crafted
+        // query string adds can redirect anyone anywhere.
+        $this->actingAs($this->user)
+            ->get("/customers/{$customer->id}/history?from=crm&next=https://evil.test")
+            ->assertInertia(fn ($page) => $page->where('returnTo.href', route('crm')));
     }
 }

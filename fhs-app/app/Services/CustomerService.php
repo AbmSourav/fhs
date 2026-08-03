@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Models\Customer;
+use App\Models\CustomerFollowUp;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
@@ -196,6 +197,11 @@ class CustomerService
         $paid = (float) $orders->sum(fn (Order $order) => $order->payments->sum('amount'));
         $lastOrderedAt = $orders->first()?->occurred_at;
 
+        // Follow-up calls belong on the same timeline as the sales: what staff
+        // want to see is the whole relationship in order — bought, chased,
+        // bought again — not two lists to read side by side.
+        $calls = $customer->followUps()->with('calledBy')->get();
+
         return [
             'id'                => $customer->id,
             'name'              => $customer->name,
@@ -207,21 +213,23 @@ class CustomerService
             'last_ordered_at'   => $lastOrderedAt,
             'has_lapsed'        => $this->hasLapsed($lastOrderedAt),
             'lapsed_after_days' => static::LAPSED_AFTER_DAYS,
-            'timeline'          => $this->buildTimeline($orders),
+            'timeline'          => $this->buildTimeline($orders, $calls),
         ];
     }
 
     /**
      * The customer's history as a single stream of events, newest first.
      *
-     * A sale and a later payment are two separate moments: an order recorded as
-     * due and settled a week later appears twice, so the timeline reads as what
-     * actually happened rather than only the sale's current state.
+     * Three kinds of moment share the timeline: a sale, money collected on a
+     * later visit, and a follow-up call. An order recorded as due and settled a
+     * week later appears twice, so the timeline reads as what actually happened
+     * rather than only the sale's current state.
      *
      * @param  Collection<int, Order>  $orders
+     * @param  Collection<int, CustomerFollowUp>  $calls
      * @return array<int, array<string, mixed>>
      */
-    private function buildTimeline(Collection $orders): array
+    private function buildTimeline(Collection $orders, Collection $calls): array
     {
         $entries = [];
 
@@ -239,11 +247,44 @@ class CustomerService
             }
         }
 
-        // Sales and payments are collected per order, so the merged list needs
-        // re-sorting to read chronologically as a whole.
+        foreach ($calls as $call) {
+            $entries[] = $this->presentCallEntry($call);
+        }
+
+        // Each kind is collected separately, so the merged list needs
+        // re-sorting to read chronologically as a whole. Ids only break ties
+        // within a kind — two different kinds sharing a timestamp order
+        // arbitrarily but stably, which is enough.
         usort($entries, fn (array $a, array $b) => [$b['occurred_at'], $b['id']] <=> [$a['occurred_at'], $a['id']]);
 
         return $entries;
+    }
+
+    /**
+     * A follow-up call, as its own timeline entry.
+     *
+     * Sits alongside the sales so a call can be read against what came before
+     * and after it: whether the customer bought after being chased is the whole
+     * question a call list exists to answer.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentCallEntry(CustomerFollowUp $call): array
+    {
+        return [
+            'kind'          => 'call',
+            'id'            => $call->id,
+            'occurred_at'   => $call->called_at,
+            'outcome'       => $call->outcome->value,
+            'outcome_label' => $call->outcome->label(),
+            // An unanswered call left the customer exactly as they were, which
+            // the entry should show rather than imply contact was made.
+            'conclusive'    => $call->outcome->isConclusive(),
+            'note'          => $call->note,
+            'call_again_on' => $call->call_again_on,
+            // Null if the user who made the call has since been removed.
+            'called_by' => $call->calledBy?->name,
+        ];
     }
 
     /**

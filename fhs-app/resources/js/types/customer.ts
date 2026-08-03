@@ -32,6 +32,8 @@ export interface CrmCustomer extends Customer {
     days_since_order: number | null;
     /** Null until somebody calls them. */
     last_called_at: string | null;
+    /** A callback staff promised and have not honoured yet, if any. */
+    next_callback_on: string | null;
 }
 
 /** One recorded call, as shown on the follow-up form. */
@@ -80,6 +82,8 @@ export interface CrmOptions {
     default_due_days: number;
     default_lapsed_days: number;
     default_repeat_minimum: number;
+    /** How far ahead the follow-up list looks, in days. */
+    default_follow_up_days: number;
 }
 
 /** A customer with their full trading history. */
@@ -92,10 +96,10 @@ export interface CustomerProfile extends Customer {
 /**
  * One moment in a customer's history.
  *
- * A sale and a payment collected later are separate events, so an order left
- * due and settled a week on appears twice.
+ * A sale, a payment collected later, and a follow-up call are separate events,
+ * so an order left due and settled a week on appears twice.
  */
-export type TimelineEntry = TimelineSale | TimelinePayment;
+export type TimelineEntry = TimelineSale | TimelinePayment | TimelineCall;
 
 /**
  * A sale, with what it left owing at the time.
@@ -131,6 +135,27 @@ export interface TimelinePayment {
     order_id: number;
     /** The sale being settled, so the entry can point back at it. */
     order_occurred_at: string;
+}
+
+/**
+ * A follow-up call, shown against the sales it sits between.
+ *
+ * Whether the customer bought after being chased is the question the call list
+ * exists to answer, so the call belongs in the same stream as the orders.
+ */
+export interface TimelineCall {
+    kind: 'call';
+    id: number;
+    occurred_at: string;
+    outcome: string;
+    outcome_label: string;
+    /** False for an unanswered call, which left the customer as they were. */
+    conclusive: boolean;
+    note: string | null;
+    /** A promised callback date, if one was agreed. */
+    call_again_on: string | null;
+    /** Null if the user who made the call has since been removed. */
+    called_by: string | null;
 }
 
 export interface TimelineItem {

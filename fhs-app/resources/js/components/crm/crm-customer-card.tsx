@@ -24,6 +24,19 @@ const date = new Intl.DateTimeFormat('en-GB', {
     timeZone: BUSINESS_TIME_ZONE,
 });
 
+/**
+ * Is a promised callback already past its date?
+ *
+ * Compared as calendar days in business time, not as instants: a callback
+ * promised for today is not late, and letting the browser's own zone decide
+ * would make it late a few hours early.
+ */
+function isOverdue(iso: string): boolean {
+    const day = (value: Date) => value.toLocaleDateString('en-CA', { timeZone: BUSINESS_TIME_ZONE });
+
+    return day(new Date(iso)) < day(new Date());
+}
+
 /** "33 days ago", or "Today" when they bought this morning. */
 function sinceLabel(days: number | null): string {
     if (days === null) {
@@ -125,11 +138,24 @@ export default function CrmCustomerCard({ customer }: { customer: CrmCustomer })
                         <dd className="mt-0.5 font-medium">{date.format(new Date(customer.last_called_at))}</dd>
                     </div>
                 )}
+
+                {/* A promise made to the customer, so it is the one date on the
+                    card that carries an obligation. */}
+                {customer.next_callback_on && (
+                    <div>
+                        <dt className="text-muted-foreground text-xs">Call back</dt>
+                        <dd className={`mt-0.5 font-medium ${isOverdue(customer.next_callback_on) ? 'text-destructive' : ''}`}>
+                            {date.format(new Date(customer.next_callback_on))}
+                        </dd>
+                    </div>
+                )}
             </dl>
 
             <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+                {/* The filters ride along so the history page can offer a way
+                    back to the same list, rather than to the customer book. */}
                 <Button variant="outline" size="sm" className="h-7 gap-1 p-2 text-xs" asChild>
-                    <Link href={`/customers/${customer.id}/history`}>
+                    <Link href={`/customers/${customer.id}/history?from=crm&${new URLSearchParams(window.location.search).toString()}`}>
                         <History className="size-3" />
                         History
                     </Link>

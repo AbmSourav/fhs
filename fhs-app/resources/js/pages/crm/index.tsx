@@ -1,8 +1,8 @@
 import CrmCustomerCard from '@/components/crm/crm-customer-card';
 import PaginationNav from '@/components/pagination-nav';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type CrmCustomer, type CrmFilters, type CrmOptions } from '@/types/customer';
@@ -18,6 +18,7 @@ const description: Record<string, string> = {
     due: 'Bought a while ago and likely ready for another cylinder',
     lapsed: 'Gone quiet for long enough to be worth chasing',
     repeat: 'Who come back — worth keeping close',
+    follow_up: 'Promised a call back — soonest first, overdue in red',
 };
 
 interface Props {
@@ -29,12 +30,18 @@ interface Props {
 export default function CrmIndex({ customers, active, options }: Props) {
     const isRepeat = active.filter === 'repeat';
 
+    // The follow-up list counts forward — callbacks promised between now and N
+    // days out — where the other day-based lists count backward.
+    const isFollowUp = active.filter === 'follow_up';
+
     // The threshold each list falls back to when nothing is typed.
     const fallback = isRepeat
         ? options.default_repeat_minimum
-        : active.filter === 'lapsed'
-          ? options.default_lapsed_days
-          : options.default_due_days;
+        : isFollowUp
+          ? options.default_follow_up_days
+          : active.filter === 'lapsed'
+            ? options.default_lapsed_days
+            : options.default_due_days;
 
     const [threshold, setThreshold] = useState(String(active.days ?? active.min_orders ?? fallback));
 
@@ -82,29 +89,43 @@ export default function CrmIndex({ customers, active, options }: Props) {
                     <p className="text-muted-foreground mt-1 text-sm">Customer Relationship Management - Contact with potential customers</p>
                 </div>
 
-                <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                        {Object.entries(options.filters).map(([key, label]) => (
-                            <Button
-                                key={key}
-                                size="sm"
-                                variant={active.filter === key ? 'default' : 'outline'}
-                                onClick={() => load(key, '')}
-                            >
-                                {label}
-                            </Button>
-                        ))}
+                {/* Two halves of one question — which list, and how it is
+                    tuned — so they sit together rather than at opposite ends. */}
+                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="grid gap-1">
+                        <Label htmlFor="filter" className="text-xs">
+                            Customer types
+                        </Label>
+                        {/* Switching list clears the threshold, so the new one
+                            starts on its own default rather than inheriting a
+                            number that meant something else. */}
+                        <Select value={active.filter} onValueChange={(value) => load(value, '')}>
+                            <SelectTrigger id="filter" className="h-9 w-full sm:w-56">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {Object.entries(options.filters).map(([key, label]) => (
+                                    <SelectItem key={key} value={key}>
+                                        {label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
-                    <div className="grid gap-2">
-                        <Label htmlFor="threshold" className="text-xs">
-                            {isRepeat ? 'At least this many orders' : 'Days since their last order'}
+                    <div className="grid gap-1">
+                        <Label htmlFor="threshold" className="text-xs flex w-46">
+                            {isRepeat
+                                ? 'At least this many orders'
+                                : isFollowUp
+                                  ? 'Follow-up within this many days'
+                                  : 'Days since their last order'}
                         </Label>
                         <Input
                             id="threshold"
-                            type="number"
+                            type="text"
                             min={1}
-                            className="h-9 w-full sm:w-44"
+                            className="h-9 w-40 sm:w-44"
                             value={threshold}
                             onChange={(e) => setThreshold(e.target.value)}
                         />
@@ -121,7 +142,7 @@ export default function CrmIndex({ customers, active, options }: Props) {
                     </div>
                 ) : (
                     <>
-                        <p className="text-green-800 dark:text-green-600 mt-6 text-sm font-bold">
+                        <p className="text-green-900 dark:text-green-500 mt-8 text-md font-bold">
                             {customers.total} {customers.total === 1 ? 'customer' : 'customers'}
                         </p>
                         <p className="mt-1 text-xs text-green-800 dark:text-green-600">{description[active.filter]}</p>

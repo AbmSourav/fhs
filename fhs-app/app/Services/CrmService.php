@@ -6,6 +6,7 @@ use App\Enums\FollowUpOutcome;
 use App\Enums\OrderStatus;
 use App\Models\Customer;
 use App\Models\CustomerFollowUp;
+use App\Support\BusinessCalendar;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -31,11 +32,20 @@ class CrmService
     /** How many orders make someone a regular worth keeping close. */
     public const DEFAULT_REPEAT_THRESHOLD = 2;
 
-    /** The three lists, and what each is for. */
+    /**
+     * How far ahead the follow-up list looks.
+     *
+     * Short on purpose: this is a to-do list for the next day or two, not a
+     * diary. A long window buries today's callbacks among next month's.
+     */
+    public const DEFAULT_FOLLOW_UP_DAYS = 2;
+
+    /** The four lists, and what each is for. */
     public const FILTERS = [
-        'due'    => 'Due a refill',
-        'lapsed' => 'Lapsed',
-        'repeat' => 'Repeat Customers',
+        'due'       => 'Due a refill',
+        'lapsed'    => 'Lapsed',
+        'repeat'    => 'Repeat Customers',
+        'follow_up' => 'Follow-up list',
     ];
 
     /**
@@ -62,6 +72,16 @@ class CrmService
             // been chased. A subquery max, not a join — joining would repeat
             // the customer once per call.
             ->withMax('followUps as last_called_at', 'called_at')
+            // The soonest callback still owed, for the follow-up list to sort
+            // and label by. A subquery min for the same reason as above.
+            //
+            // Deliberately not bounded by the window: the filter decides who
+            // appears, and once someone is on the list the date worth showing
+            // is the earliest they are owed, which is what put them there.
+            ->withMin(
+                ['followUps as next_callback_on' => fn (Builder $calls) => $this->outstandingCallbacks($calls)],
+                'call_again_on',
+            )
             // Someone who has never bought anything is not a follow-up: there
             // is no rhythm to have fallen out of and nothing to refill.
             ->whereHas('orders', $happened);
@@ -84,6 +104,21 @@ class CrmService
     private function applyFilter(Builder $query, string $filter, ?int $days, ?int $minOrders, callable $happened): void
     {
         match ($filter) {
+            // Customers staff promised to call back, on the date they were
+            // promised. Unlike the other three this is not derived from buying
+            // behaviour at all — it is a to-do list the business made for
+            // itself, so no threshold applies and none is offered.
+            'follow_up' => $query
+                ->whereHas('followUps', fn (Builder $calls) => $this->outstandingCallbacks($calls)
+                    // Bounded at the far end only. Anything already overdue
+                    // stays on the list however short the window — a missed
+                    // callback does not stop being owed.
+                    ->whereDate('call_again_on', '<=', $this->followUpHorizon($days)))
+                // Soonest first, so anything already overdue leads. Ordered on
+                // the withMin alias, which is safe here: this is an ORDER BY,
+                // not a WHERE, and a subquery select can be sorted on.
+                ->orderBy('next_callback_on'),
+
             // Constrained through whereHas rather than HAVING on the withCount
             // alias: that alias is a subquery select, not a grouped column, so
             // HAVING cannot see it.
@@ -101,6 +136,17 @@ class CrmService
             default => $query
                 ->whereDoesntHave('orders', fn (Builder $orders) => $happened($orders)
                     ->where('occurred_at', '>', $this->cutoffFor($filter, $days)))
+                // Somebody already chased them inside the same window, so
+                // calling again would be the second call about one refill.
+                // Measured against the same cutoff as the order: a customer is
+                // due when neither a purchase nor a call has happened since.
+                //
+                // 'due' only. A lapsed customer called last week is still
+                // lapsed — the call did not bring them back, and hiding them
+                // would drop exactly the people worth chasing hardest.
+                ->when($filter === 'due', fn (Builder $due) => $due
+                    ->whereDoesntHave('followUps', fn (Builder $calls) => $calls
+                        ->where('called_at', '>', $this->cutoffFor($filter, $days))))
                 // The two lists are worked from opposite ends. 'due' starts
                 // with whoever just crossed the threshold — they are closest to
                 // needing a refill and most likely to buy. 'lapsed' starts with
@@ -112,6 +158,42 @@ class CrmService
         // Ties would otherwise order arbitrarily, so a list would shuffle
         // between page loads.
         $query->orderByDesc('id');
+    }
+
+    /**
+     * Callbacks that were promised and have not been honoured yet.
+     *
+     * A promise is settled by calling them again, not by the date arriving, so
+     * the test is "is there a later call?" rather than anything about today.
+     * Without that, a callback nobody removed would sit on the list forever.
+     */
+    private function outstandingCallbacks(Builder $calls): Builder
+    {
+        return $calls
+            ->whereNotNull('call_again_on')
+            // A raw exists against an aliased copy of the same table. Going
+            // back through the customer relation would not work: the nested
+            // query reuses the table name, so whereColumn would compare the
+            // row against itself rather than against the call that promised.
+            ->whereNotExists(fn ($later) => $later
+                ->selectRaw('1')
+                ->from('customer_follow_ups as later_calls')
+                ->whereColumn('later_calls.customer_id', 'customer_follow_ups.customer_id')
+                ->whereColumn('later_calls.called_at', '>', 'customer_follow_ups.called_at'));
+    }
+
+    /**
+     * The last day a promised callback can fall on and still be listed.
+     *
+     * Counted in business days rather than from the current instant: "the next
+     * two days" means today and tomorrow to whoever is working the list, not a
+     * 48-hour window that expires mid-afternoon.
+     */
+    private function followUpHorizon(?int $days): string
+    {
+        return BusinessCalendar::now()
+            ->addDays(max(0, ($days ?? static::DEFAULT_FOLLOW_UP_DAYS) - 1))
+            ->toDateString();
     }
 
     /** Nobody who has bought since this moment belongs on the list. */
@@ -255,6 +337,7 @@ class CrmService
             'default_due_days'       => static::DEFAULT_DUE_AFTER_DAYS,
             'default_lapsed_days'    => CustomerService::LAPSED_AFTER_DAYS,
             'default_repeat_minimum' => static::DEFAULT_REPEAT_THRESHOLD,
+            'default_follow_up_days' => static::DEFAULT_FOLLOW_UP_DAYS,
         ];
     }
 
@@ -291,6 +374,11 @@ class CrmService
             // aggregate alias and so bypasses the model's casts.
             'last_called_at' => $customer->last_called_at !== null
                 ? Carbon::parse($customer->last_called_at)
+                : null,
+            // When staff promised to ring back, if they did. Null for everyone
+            // on the other three lists, who were never promised anything.
+            'next_callback_on' => $customer->next_callback_on !== null
+                ? Carbon::parse($customer->next_callback_on)
                 : null,
         ];
     }
