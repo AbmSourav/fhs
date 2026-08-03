@@ -21,6 +21,33 @@ export interface Customer {
     has_lapsed: boolean;
 }
 
+/**
+ * A customer on a follow-up list.
+ *
+ * The same figures as the customer book, plus how long it has been — which is
+ * the reason they are on the list at all.
+ */
+export interface CrmCustomer extends Customer {
+    /** Null only for a customer with no orders, who never appears here. */
+    days_since_order: number | null;
+}
+
+/** Which call list is showing, and how it is tuned. */
+export interface CrmFilters {
+    filter: string;
+    /** Null means the list's own default applies. */
+    days: number | null;
+    min_orders: number | null;
+}
+
+/** The choices behind the filter controls. */
+export interface CrmOptions {
+    filters: Record<string, string>;
+    default_due_days: number;
+    default_lapsed_days: number;
+    default_repeat_minimum: number;
+}
+
 /** A customer with their full trading history. */
 export interface CustomerProfile extends Customer {
     /** How long without an order counts as lapsed, for explaining the badge. */

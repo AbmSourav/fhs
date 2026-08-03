@@ -46,7 +46,7 @@ export default function CustomerCard({ customer }: { customer: Customer }) {
                 </div>
 
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge variant="secondary" className="shrink-0 gap-1 bg-green-300">
+                    <Badge variant="success" className="shrink-0 gap-1">
                         <Repeat className="size-3" />
                         {customer.order_count} orders
                     </Badge>

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BrandController;
 use App\Http\Controllers\CatalogueController;
+use App\Http\Controllers\CrmController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
@@ -55,6 +56,8 @@ Route::middleware(['auth'])->group(function () {
             ->name('orders.customer-lookup');
 
         Route::get('statistics', StatisticsController::class)->name('statistics');
+
+        Route::get('crm', CrmController::class)->name('crm');
 
         Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
         Route::get('expenses/add', [ExpenseController::class, 'create'])->name('expenses.create');
