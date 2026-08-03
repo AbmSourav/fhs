@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Enums\FollowUpOutcome;
 use App\Models\Brand;
 use App\Models\Catalogue;
 use App\Models\Customer;
+use App\Models\CustomerFollowUp;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\CrmService;
@@ -103,14 +105,26 @@ class CrmListTest extends TestCase
         $this->assertSame([], $this->namesOn('due', days: 30));
     }
 
-    public function test_the_refill_list_puts_the_longest_overdue_first(): void
+    public function test_the_refill_list_puts_the_most_recently_due_first(): void
     {
         $this->sellTo('01700000001', 'Middle', 40);
         $this->sellTo('01700000002', 'Longest', 90);
         $this->sellTo('01700000003', 'Shortest', 22);
 
-        // A call list is worked from the top, so the most overdue belong there.
-        $this->assertSame(['Longest', 'Middle', 'Shortest'], $this->namesOn('due'));
+        // Fewest days first: whoever just crossed the threshold is closest to
+        // needing a refill, and most likely to buy when called.
+        $this->assertSame(['Shortest', 'Middle', 'Longest'], $this->namesOn('due'));
+    }
+
+    public function test_the_lapsed_list_puts_the_longest_silent_first(): void
+    {
+        $this->sellTo('01700000001', 'Middle', 60);
+        $this->sellTo('01700000002', 'Longest', 200);
+        $this->sellTo('01700000003', 'Shortest', 46);
+
+        // The opposite end from 'due': these are furthest gone and need
+        // chasing hardest.
+        $this->assertSame(['Longest', 'Middle', 'Shortest'], $this->namesOn('lapsed'));
     }
 
     public function test_only_a_customers_most_recent_order_counts(): void
@@ -128,8 +142,8 @@ class CrmListTest extends TestCase
         $this->sellTo('01700000002', 'Just due', 25);
 
         // 25 days is due a refill but not yet lapsed; the two lists are the
-        // same measure at different thresholds.
-        $this->assertSame(['Gone quiet', 'Just due'], $this->namesOn('due'));
+        // same measure at different thresholds. 'due' reads fewest days first.
+        $this->assertSame(['Just due', 'Gone quiet'], $this->namesOn('due'));
         $this->assertSame(['Gone quiet'], $this->namesOn('lapsed'));
     }
 
@@ -230,6 +244,146 @@ class CrmListTest extends TestCase
         $this->actingAs($this->user)
             ->get('/crm?filter=nonsense')
             ->assertSessionHasErrors('filter');
+    }
+
+    public function test_placing_a_call_logs_it_before_the_form_is_filled_in(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)
+            ->post("/crm/{$customer->id}/call")
+            ->assertRedirect();
+
+        $followUp = CustomerFollowUp::query()->latest('id')->first();
+
+        // An abandoned form still leaves evidence the call happened, which is
+        // the whole reason the row is written on click.
+        $this->assertSame($customer->id, $followUp->customer_id);
+        $this->assertSame($this->user->id, $followUp->called_by);
+        $this->assertSame(FollowUpOutcome::NoAnswer, $followUp->outcome);
+        $this->assertNotNull($followUp->called_at);
+    }
+
+    public function test_writing_up_a_call_updates_the_row_rather_than_adding_one(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)->post("/crm/{$customer->id}/call");
+        $followUp = CustomerFollowUp::query()->latest('id')->first();
+
+        $this->actingAs($this->user)
+            ->post("/crm/{$customer->id}/followup/{$followUp->id}", [
+                'outcome'       => 'will_buy_later',
+                'note'          => 'Wants delivery after Eid',
+                'called_at'     => now()->toDateTimeString(),
+                'call_again_on' => now()->addWeek()->toDateString(),
+            ])
+            ->assertRedirect();
+
+        // One call is one record: the placeholder is filled in, not doubled.
+        $this->assertSame(1, CustomerFollowUp::count());
+
+        $followUp->refresh();
+        $this->assertSame(FollowUpOutcome::WillBuyLater, $followUp->outcome);
+        $this->assertSame('Wants delivery after Eid', $followUp->note);
+        $this->assertNotNull($followUp->call_again_on);
+    }
+
+    public function test_a_callback_cannot_be_promised_for_the_past(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)->post("/crm/{$customer->id}/call");
+        $followUp = CustomerFollowUp::query()->latest('id')->first();
+
+        $this->actingAs($this->user)
+            ->post("/crm/{$customer->id}/followup/{$followUp->id}", [
+                'outcome'       => 'will_buy_later',
+                'called_at'     => now()->toDateTimeString(),
+                'call_again_on' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHasErrors('call_again_on');
+    }
+
+    public function test_a_call_can_be_written_up_as_having_happened_earlier(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)->post("/crm/{$customer->id}/call");
+        $followUp = CustomerFollowUp::query()->latest('id')->first();
+
+        // Called this morning, written up tonight.
+        $this->actingAs($this->user)
+            ->post("/crm/{$customer->id}/followup/{$followUp->id}", [
+                'outcome'   => 'reached',
+                'called_at' => now()->subHours(6)->toDateTimeString(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue(
+            $followUp->refresh()->called_at->lessThan(now()->subHours(5)),
+        );
+    }
+
+    public function test_a_call_cannot_be_dated_in_the_future(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs($this->user)->post("/crm/{$customer->id}/call");
+        $followUp = CustomerFollowUp::query()->latest('id')->first();
+
+        $this->actingAs($this->user)
+            ->post("/crm/{$customer->id}/followup/{$followUp->id}", [
+                'outcome'   => 'reached',
+                'called_at' => now()->addDay()->toDateTimeString(),
+            ])
+            ->assertSessionHasErrors('called_at');
+    }
+
+    public function test_a_follow_up_belonging_to_another_customer_is_not_found(): void
+    {
+        $this->sellTo('01700000001', 'One', 25);
+        $this->sellTo('01700000002', 'Two', 25);
+
+        $one = Customer::where('mobile_number', '01700000001')->first();
+        $two = Customer::where('mobile_number', '01700000002')->first();
+
+        $this->actingAs($this->user)->post("/crm/{$one->id}/call");
+        $followUp = CustomerFollowUp::query()->latest('id')->first();
+
+        // The ids are both real, but they do not belong together.
+        $this->actingAs($this->user)
+            ->get("/crm/{$two->id}/followup/{$followUp->id}")
+            ->assertNotFound();
+    }
+
+    public function test_the_list_shows_when_a_customer_was_last_called(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->assertNull($this->crm->paginate('due')->items()[0]['last_called_at']);
+
+        $this->actingAs($this->user)->post("/crm/{$customer->id}/call");
+
+        $this->assertNotNull($this->crm->paginate('due')->items()[0]['last_called_at']);
+    }
+
+    public function test_calling_is_admin_only(): void
+    {
+        $this->sellTo('01700000001', 'Overdue', 25);
+        $customer = Customer::where('mobile_number', '01700000001')->first();
+
+        $this->actingAs(User::factory()->create())
+            ->post("/crm/{$customer->id}/call")
+            ->assertForbidden();
+
+        $this->assertSame(0, CustomerFollowUp::count());
     }
 
     public function test_the_crm_page_is_admin_only(): void

@@ -398,6 +398,116 @@ class OrderRecordingTest extends TestCase
         $this->assertStringContainsString('Jamuna', $row['items'][0]['returned_name']);
     }
 
+    public function test_a_line_reports_what_it_made_after_cost(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $this->sell([[
+            'catalogue_id'     => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity'         => 2,
+            'unit_price'       => 1400,
+        ]]);
+
+        $row = $this->orders->paginate()->items()[0];
+
+        // A swap consumes gas only, at 340 apiece: (1400 − 340) × 2.
+        $this->assertSame(2120.0, $row['items'][0]['margin']);
+        $this->assertSame(2120.0, $row['margin']);
+    }
+
+    public function test_an_outright_sale_carries_the_shell_cost_too(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $this->sell([[
+            'catalogue_id'     => $jamuna->id,
+            'transaction_type' => 'buy_with_gas',
+            'quantity'         => 1,
+            // On an outright sale unit_price is the gas alone; the shell is
+            // priced separately and the two are added.
+            'unit_price'     => 800,
+            'cylinder_price' => 1200,
+        ]]);
+
+        // The customer keeps the cylinder, so the shell is gone for good:
+        // (800 + 1200) charged − (900 shell + 340 gas).
+        $this->assertSame(760.0, $this->orders->paginate()->items()[0]['margin']);
+    }
+
+    public function test_a_sale_below_cost_reports_a_negative_margin(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $this->sell([[
+            'catalogue_id'     => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity'         => 1,
+            'unit_price'       => 200,
+        ]]);
+
+        // Sold under what the gas cost. Reported as the loss it is rather than
+        // clamped at zero.
+        $this->assertSame(-140.0, $this->orders->paginate()->items()[0]['margin']);
+    }
+
+    public function test_a_sales_margin_is_the_sum_of_its_lines(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $bashundhara = $this->makeCylinder('Bashundhara');
+        $this->stockUp($jamuna);
+        $this->stockUp($bashundhara);
+
+        $this->sell([
+            [
+                'catalogue_id'     => $jamuna->id,
+                'transaction_type' => 'swap',
+                'quantity'         => 1,
+                'unit_price'       => 1400,
+            ],
+            [
+                'catalogue_id'     => $bashundhara->id,
+                'transaction_type' => 'swap',
+                'quantity'         => 1,
+                'unit_price'       => 1500,
+            ],
+        ]);
+
+        $row = $this->orders->paginate()->items()[0];
+
+        $this->assertSame(1060.0, $row['items'][0]['margin']);
+        $this->assertSame(1160.0, $row['items'][1]['margin']);
+        $this->assertSame(2220.0, $row['margin']);
+    }
+
+    public function test_a_margin_uses_the_cost_frozen_when_the_sale_happened(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        $this->sell([[
+            'catalogue_id'     => $jamuna->id,
+            'transaction_type' => 'swap',
+            'quantity'         => 1,
+            'unit_price'       => 1400,
+        ]]);
+
+        // Gas bought later at a much higher price shifts the running average.
+        $this->inventory->record([
+            'catalogue_id'    => $jamuna->id,
+            'purchased_at'    => now()->toDateString(),
+            'filled_quantity' => 20,
+            'shell_unit_cost' => 900,
+            'gas_unit_cost'   => 900,
+        ], $this->user->id);
+
+        // The recorded sale is unaffected: it cost what it cost at the time.
+        $this->assertSame(1060.0, $this->orders->paginate()->items()[0]['margin']);
+    }
+
     public function test_a_same_brand_swap_does_not_name_the_returned_product(): void
     {
         $jamuna = $this->makeCylinder('Jamuna');
@@ -893,6 +1003,35 @@ class OrderRecordingTest extends TestCase
             ->assertSessionHasErrors('occurred_at');
 
         $this->assertSame(0, Order::count());
+    }
+
+    public function test_a_missing_line_field_is_reported_in_plain_words(): void
+    {
+        $jamuna = $this->makeCylinder('Jamuna');
+        $this->stockUp($jamuna);
+
+        config(['app.admin_emails' => [strtolower($this->user->email)]]);
+
+        $response = $this->actingAs($this->user)
+            ->post('/orders', [
+                'occurred_at' => now()->format('Y-m-d H:i:s'),
+                'items'       => [[
+                    'catalogue_id' => $jamuna->id,
+                    // Sale type left unset.
+                    'quantity'   => 1,
+                    'unit_price' => 1400,
+                ]],
+                'is_paid' => true,
+            ]);
+
+        $response->assertSessionHasErrors('items.0.transaction_type');
+
+        // Laravel would otherwise fall back to the attribute path and say
+        // "The items.0.transaction_type field is required."
+        $this->assertSame(
+            'Choose a sale type for each product.',
+            session('errors')->first('items.0.transaction_type'),
+        );
     }
 
     public function test_a_sale_can_be_backdated(): void

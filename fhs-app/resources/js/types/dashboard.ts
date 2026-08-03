@@ -21,6 +21,8 @@ export interface MonthlyFigures {
     average_order: Metric;
     /** Money received this month, whichever month the sale was in. */
     collected: Metric;
+    /** Non-stock spending: the expenses table plus consignment transport. */
+    expenses: Metric;
 }
 
 /**
@@ -64,7 +66,7 @@ export interface AllTimePosition {
     sales_count: number;
     /** What the goods sold actually cost, frozen at the moment of each sale. */
     cogs: number;
-    /** Non-stock spending — fuel, wages, rent. */
+    /** Non-stock spending: the expenses table plus consignment transport. */
     other_expenses: number;
     /** Revenue less what the goods cost. */
     gross_profit: number;

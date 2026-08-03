@@ -46,10 +46,17 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
                     <p className="text-muted-foreground mt-0.5 text-xs">{date.format(new Date(purchase.purchased_at))}</p>
                 </div>
 
-                {purchase.is_refill && (
+                {(!purchase.swapped_for && purchase.is_refill) && (
                     <Badge variant="secondary" className="shrink-0 gap-1">
                         <RotateCcw className="size-3" />
                         Swap
+                    </Badge>
+                )}
+
+                {purchase.swapped_for && (
+                    <Badge variant="secondary" className="shrink-0 gap-1">
+                        <RotateCcw className="size-3" />
+                        Cross-brand Swap
                     </Badge>
                 )}
             </div>

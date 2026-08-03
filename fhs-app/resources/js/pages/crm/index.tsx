@@ -1,4 +1,4 @@
-import CustomerCard from '@/components/customers/customer-card';
+import CrmCustomerCard from '@/components/crm/crm-customer-card';
 import PaginationNav from '@/components/pagination-nav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'CRM', href: '/crm' }];
 const description: Record<string, string> = {
     due: 'Bought a while ago and likely ready for another cylinder',
     lapsed: 'Gone quiet for long enough to be worth chasing',
-    repeat: 'Customers who come back — worth keeping close',
+    repeat: 'Who come back — worth keeping close',
 };
 
 interface Props {
@@ -128,7 +128,7 @@ export default function CrmIndex({ customers, active, options }: Props) {
 
                         <ul className="mt-3 grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {customers.data.map((customer) => (
-                                <CustomerCard key={customer.id} customer={customer} />
+                                <CrmCustomerCard key={customer.id} customer={customer} />
                             ))}
                         </ul>
 

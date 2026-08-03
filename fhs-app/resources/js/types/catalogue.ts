@@ -22,4 +22,12 @@ export interface CatalogueItem {
     empty_stock: number;
     /** Negative stock is allowed and flagged, not prevented. */
     has_negative_stock: boolean;
+    /**
+     * The weighted average across every purchase of this product — what a sale
+     * of it is costed at. For plain goods this is the item itself; for gas it
+     * is the gas alone, with the shell averaged separately.
+     */
+    average_gas_cost: number;
+    /** Zero for anything without a shell. */
+    average_shell_cost: number;
 }

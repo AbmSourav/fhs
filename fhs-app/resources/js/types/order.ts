@@ -14,6 +14,8 @@ export interface Order {
     paid_amount: number;
     due_amount: number;
     payment_state: 'paid' | 'partial' | 'due';
+    /** What the sale made after what the goods cost. Negative if sold at a loss. */
+    margin: number;
     items: OrderLine[];
 }
 
@@ -37,6 +39,11 @@ export interface OrderLine {
     cylinder_price: number | null;
     gas_price: number | null;
     line_total: number;
+    /**
+     * Line total less what the goods cost, using the weighted average frozen
+     * at the moment of sale. Negative when sold below cost.
+     */
+    margin: number;
 }
 
 /** A product available to sell. */

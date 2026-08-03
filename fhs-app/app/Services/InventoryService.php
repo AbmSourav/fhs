@@ -351,8 +351,7 @@ class InventoryService
             // limit arbitrary, and so different between requests.
             ->latest('id')
             ->limit($recentPerTable)
-            ->get()
-            ->map(fn (GasInventoryPurchase $purchase) => $this->presentGasPurchase($purchase));
+            ->get();
 
         $plain = InventoryPurchase::query()
             // withTrashed: a purchase is a historical record, so it keeps its
@@ -363,10 +362,11 @@ class InventoryService
             ->latest('purchased_at')
             ->latest('id')
             ->limit($recentPerTable)
-            ->get()
-            ->map(fn (InventoryPurchase $purchase) => $this->presentPlainPurchase($purchase));
+            ->get();
 
-        $purchases = $gas->concat($plain)
+        $purchases = $gas
+            ->map(fn (GasInventoryPurchase $purchase) => $this->presentGasPurchase($purchase))
+            ->concat($plain->map(fn (InventoryPurchase $purchase) => $this->presentPlainPurchase($purchase)))
             // `key` breaks ties so the order is total: without it, purchases
             // sharing a timestamp could swap places between page loads and a
             // row would repeat on one page and vanish from the next.

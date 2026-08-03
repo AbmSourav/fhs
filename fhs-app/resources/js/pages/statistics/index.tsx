@@ -31,7 +31,7 @@ export default function Statistics({ position }: { position: AllTimePosition }) 
 
                     <StatCard label="Gross profit" value={position.gross_profit} icon={TrendingUp} hint="Revenue less goods cost" />
 
-                    <StatCard label="Other expenses" value={position.other_expenses} icon={Receipt} hint="Transport, wages, rent" />
+                    <StatCard label="Expenses" value={position.other_expenses} icon={Receipt} hint="Running costs and transport" />
 
                     <StatCard
                         label="Net profit"

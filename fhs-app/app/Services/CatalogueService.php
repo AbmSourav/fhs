@@ -10,6 +10,10 @@ use Illuminate\Validation\ValidationException;
 
 class CatalogueService
 {
+    public function __construct(
+        private readonly CostBasis $costBasis,
+    ) {}
+
     /**
      * Validation rules for creating a catalogue item.
      *
@@ -76,12 +80,18 @@ class CatalogueService
      */
     public function listWithStock(): Collection
     {
-        return Catalogue::query()
+        $items = Catalogue::query()
             ->with('brand')
             ->withStock()
             ->orderBy('type')
             ->orderBy('weight')
-            ->get()
+            ->get();
+
+        // Averaged for the whole catalogue in three queries rather than three
+        // per item.
+        $averages = $this->costBasis->forItems($items);
+
+        return $items
             ->map(fn (Catalogue $item) => [
                 'id'            => $item->id,
                 'name'          => $item->name,
@@ -97,6 +107,14 @@ class CatalogueService
                 // Negative stock is allowed — the business sells first and
                 // reconciles later — so it is surfaced rather than prevented.
                 'has_negative_stock' => $item->hasNegativeStock(),
+                // The weighted average across every purchase of this product,
+                // which is what a sale of it is costed at. Gas and shell are
+                // averaged apart because they are sold apart: a swap consumes
+                // gas without consuming a cylinder.
+                'average_gas_cost' => $item->is_gas
+                    ? $averages[$item->id]['gas']
+                    : $averages[$item->id]['plain'],
+                'average_shell_cost' => $item->is_gas ? $averages[$item->id]['shell'] : 0.0,
             ]);
     }
 

@@ -2,6 +2,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/datetime';
+import { cn } from '@/lib/utils';
 import { type Order } from '@/types/order';
 import { Link } from '@inertiajs/react';
 import { type VariantProps } from 'class-variance-authority';
@@ -80,10 +81,24 @@ export default function OrderCard({ order }: { order: Order }) {
                                         )}
                                     </div>
 
-                                    <span className="shrink-0 font-medium tabular-nums">{currency.format(line.line_total)}</span>
+                                    <div className="shrink-0 text-right">
+                                        <span className="font-medium tabular-nums">{currency.format(line.line_total)}</span>
+                                    </div>
                                 </li>
                             ))}
                         </ul>
+
+                        <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3 text-sm">
+                            <span className="text-muted-foreground">{order.margin < 0 ? 'Loss on this sale' : 'Profit on this sale'}</span>
+                            <span
+                                className={cn(
+                                    'font-medium tabular-nums',
+                                    order.margin < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400',
+                                )}
+                            >
+                                {currency.format(order.margin)}
+                            </span>
+                        </div>
 
                         {(order.due_amount || order.is_editable) &&
                             <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3">

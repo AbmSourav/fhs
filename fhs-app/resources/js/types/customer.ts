@@ -30,6 +30,40 @@ export interface Customer {
 export interface CrmCustomer extends Customer {
     /** Null only for a customer with no orders, who never appears here. */
     days_since_order: number | null;
+    /** Null until somebody calls them. */
+    last_called_at: string | null;
+}
+
+/** One recorded call, as shown on the follow-up form. */
+export interface FollowUp {
+    id: number;
+    outcome: string;
+    note: string;
+    /** When the call was placed. Stored UTC, edited in business time. */
+    called_at: string;
+    customer: {
+        id: number;
+        name: string;
+        mobile_number: string | null;
+        address: string | null;
+    };
+    /** Earlier calls, so staff can see what was said last time. */
+    history: PastCall[];
+}
+
+/** A choice in the outcome select. */
+export interface OutcomeOption {
+    value: string;
+    label: string;
+}
+
+export interface PastCall {
+    id: number;
+    outcome_label: string;
+    note: string | null;
+    called_at: string;
+    /** Null if the user who made the call has since been removed. */
+    called_by: string | null;
 }
 
 /** Which call list is showing, and how it is tuned. */

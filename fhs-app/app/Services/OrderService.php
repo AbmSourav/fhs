@@ -27,6 +27,10 @@ use Illuminate\Validation\ValidationException;
  */
 class OrderService
 {
+    public function __construct(
+        private readonly CostBasis $costBasis,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -65,12 +69,44 @@ class OrderService
         ];
     }
 
+    /**
+     * Wording for the messages the default would get wrong.
+     *
+     * Line fields especially: Laravel falls back to the attribute path, so an
+     * unset dropdown reads "The items.0.transaction_type field is required."
+     * Every rule on a line therefore names the field in plain words.
+     */
     public function messages(): array
     {
         return [
+            'occurred_at.required'        => 'Enter when the sale happened.',
             'occurred_at.before_or_equal' => 'A sale cannot be dated in the future.',
-            'items.required'              => 'Add at least one product to the order.',
+
+            'items.required' => 'Add at least one product to the order.',
+            'items.min'      => 'Add at least one product to the order.',
+
+            'items.*.catalogue_id.required' => 'Choose a product for each line.',
+            'items.*.catalogue_id.exists'   => 'That product is no longer in the catalogue.',
+
+            'items.*.transaction_type.required' => 'Choose a sale type for each product.',
+            'items.*.transaction_type.enum'     => 'Choose a valid sale type.',
+
+            'items.*.quantity.required' => 'Enter a quantity for each product.',
+            'items.*.quantity.integer'  => 'A quantity must be a whole number.',
+            'items.*.quantity.min'      => 'A quantity must be at least one.',
+
             'items.*.unit_price.required' => 'Enter a price for each product.',
+            'items.*.unit_price.numeric'  => 'A price must be a number.',
+            'items.*.unit_price.min'      => 'A price cannot be negative.',
+
+            'items.*.cylinder_price.numeric' => 'A cylinder price must be a number.',
+            'items.*.cylinder_price.min'     => 'A cylinder price cannot be negative.',
+
+            'items.*.returned_catalogue_id.exists' => 'That returned product is no longer in the catalogue.',
+
+            'amount_paid.numeric' => 'The amount received must be a number.',
+            'amount_paid.min'     => 'The amount received cannot be negative.',
+            'payment_method.enum' => 'Choose how the customer paid.',
         ];
     }
 
@@ -355,52 +391,7 @@ class OrderService
      */
     private function costBasisFor(Catalogue $item, TransactionType $type): float
     {
-        if (! $item->is_gas) {
-            return $this->plainAverageCost($item);
-        }
-
-        $gas = $type->includesGas() ? $this->gasAverageCost($item) : 0.0;
-        $shell = $type->includesShell() ? $this->shellAverageCost($item) : 0.0;
-
-        return round($gas + $shell, 2);
-    }
-
-    private function plainAverageCost(Catalogue $item): float
-    {
-        $row = $item->purchases()
-            ->selectRaw('SUM(unit_cost * quantity) as cost, SUM(quantity) as qty')
-            ->first();
-
-        return $this->divide((float) $row?->cost, (int) $row?->qty);
-    }
-
-    private function gasAverageCost(Catalogue $item): float
-    {
-        // Only filled cylinders carry gas, so empties must not dilute it.
-        $row = $item->gasPurchases()
-            ->where('filled_quantity', '>', 0)
-            ->selectRaw('SUM(gas_unit_cost * filled_quantity) as cost, SUM(filled_quantity) as qty')
-            ->first();
-
-        return $this->divide((float) $row?->cost, (int) $row?->qty);
-    }
-
-    private function shellAverageCost(Catalogue $item): float
-    {
-        // Swaps acquire no shells, so they are excluded — including them would
-        // divide by cylinders that were never bought.
-        $row = $item->gasPurchases()
-            ->whereNull('swap_catalogue_id')
-            ->selectRaw('SUM(shell_unit_cost * (filled_quantity + empty_quantity)) as cost, SUM(filled_quantity + empty_quantity) as qty')
-            ->first();
-
-        return $this->divide((float) $row?->cost, (int) $row?->qty);
-    }
-
-    /** Nothing purchased yet means no cost basis, not a division by zero. */
-    private function divide(float $cost, int $quantity): float
-    {
-        return $quantity > 0 ? round($cost / $quantity, 2) : 0.0;
+        return $this->costBasis->forSale($item, $type);
     }
 
     /**
@@ -493,7 +484,12 @@ class OrderService
                 'cylinder_price' => $item->hasPriceSplit() ? (float) $item->cylinder_price : null,
                 'gas_price'      => $item->hasPriceSplit() ? $item->gasPrice() : null,
                 'line_total'     => (float) $item->line_total,
+                // What the line made, against the cost frozen when it sold. A
+                // later change in supplier prices cannot rewrite it.
+                'margin' => $item->margin(),
             ])->all(),
+            // The sale's own profit, so the card need not add the lines up.
+            'margin' => round($order->items->sum(fn (OrderItem $item) => $item->margin()), 2),
         ];
     }
 

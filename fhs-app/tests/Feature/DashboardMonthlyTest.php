@@ -7,6 +7,7 @@ use App\Models\Catalogue;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\DashboardService;
+use App\Services\ExpenseService;
 use App\Services\InventoryService;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -240,6 +241,45 @@ class DashboardMonthlyTest extends TestCase
         $this->assertSame(0.0, $month['revenue']['current']);
         $this->assertSame(1400.0, $month['revenue']['previous']);
         $this->assertSame(1400.0, $month['collected']['current']);
+    }
+
+    public function test_expenses_are_scoped_to_the_month_they_were_spent_in(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $expenses = app(ExpenseService::class);
+
+        foreach (['2026-08-05 06:00:00' => 500, '2026-07-20 06:00:00' => 900] as $spentAt => $amount) {
+            $expenses->record([
+                'category'       => 'utilities',
+                'description'    => 'Electricity',
+                'amount'         => $amount,
+                'payment_method' => 'cash',
+                'spent_at'       => $spentAt,
+            ], $this->user->id);
+        }
+
+        $month = $this->dashboard->monthlyFigures();
+
+        $this->assertSame(500.0, $month['expenses']['current']);
+        $this->assertSame(900.0, $month['expenses']['previous']);
+    }
+
+    public function test_consignment_transport_counts_toward_the_month_it_arrived(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        app(InventoryService::class)->record([
+            'catalogue_id'    => $this->cylinder->id,
+            'purchased_at'    => '2026-08-08 06:00:00',
+            'filled_quantity' => 10,
+            'gas_unit_cost'   => 800,
+            'transport_cost'  => 450,
+        ], $this->user->id);
+
+        // Delivery is money out, recorded on the purchase rather than in the
+        // expenses table — but it is still an expense.
+        $this->assertSame(450.0, $this->dashboard->monthlyFigures()['expenses']['current']);
     }
 
     public function test_a_failed_order_is_excluded_from_the_month(): void

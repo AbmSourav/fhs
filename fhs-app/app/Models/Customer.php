@@ -33,6 +33,17 @@ class Customer extends Model
     }
 
     /**
+     * Every attempt at contacting them, newest first.
+     *
+     * A log rather than a single "last contacted" column, so calling someone
+     * twice does not erase the first attempt.
+     */
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(CustomerFollowUp::class)->latest('called_at');
+    }
+
+    /**
      * Find a customer by mobile number, or create one.
      *
      * Two things this has to get right:

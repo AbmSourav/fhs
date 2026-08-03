@@ -57,7 +57,11 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('statistics', StatisticsController::class)->name('statistics');
 
-        Route::get('crm', CrmController::class)->name('crm');
+        Route::get('crm', [CrmController::class, 'index'])->name('crm');
+        // Logs the call, then hands off to the write-up form.
+        Route::post('crm/{customer}/call', [CrmController::class, 'call'])->name('crm.call');
+        Route::get('crm/{customer}/followup/{followUp}', [CrmController::class, 'followUp'])->name('crm.follow-up');
+        Route::post('crm/{customer}/followup/{followUp}', [CrmController::class, 'storeFollowUp'])->name('crm.follow-up.store');
 
         Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
         Route::get('expenses/add', [ExpenseController::class, 'create'])->name('expenses.create');

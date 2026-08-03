@@ -88,6 +88,7 @@ export default function CustomerCard({ customer }: { customer: Customer }) {
                             {customer.last_ordered_at ? date.format(new Date(customer.last_ordered_at)) : '—'}
                         </dd>
                     </div>
+
                 </dl>
 
                 <div className="flex shrink-0 items-center gap-2">

@@ -257,6 +257,28 @@ class DashboardStatisticsTest extends TestCase
         $this->assertSame(9000.0, $this->dashboard->allTimePosition()['shell_value']);
     }
 
+    public function test_consignment_transport_counts_as_an_expense(): void
+    {
+        $this->buyStock(['transport_cost' => 500]);
+        $this->spend(300);
+
+        // Getting a delivery to the premises is money out, recorded on the
+        // purchase rather than in the expenses table.
+        $this->assertSame(800.0, $this->dashboard->allTimePosition()['other_expenses']);
+    }
+
+    public function test_transport_is_not_counted_twice(): void
+    {
+        $this->buyStock(['transport_cost' => 500]);
+
+        $position = $this->dashboard->allTimePosition();
+
+        // Being an expense, it must not also inflate what the unsold stock is
+        // worth — 10 filled at 800 gas, with transport counted apart from it.
+        $this->assertSame(8000.0, $position['stock_value']);
+        $this->assertSame(500.0, $position['other_expenses']);
+    }
+
     public function test_other_expenses_reduce_net_but_not_gross_profit(): void
     {
         $this->buyStock();

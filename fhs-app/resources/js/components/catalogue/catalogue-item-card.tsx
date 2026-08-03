@@ -2,6 +2,14 @@ import { Badge } from '@/components/ui/badge';
 import { type CatalogueItem } from '@/types/catalogue';
 import { TriangleAlert } from 'lucide-react';
 
+// narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
+const currency = new Intl.NumberFormat('en-BD', {
+    style: 'currency',
+    currency: 'BDT',
+    currencyDisplay: 'narrowSymbol',
+    maximumFractionDigits: 0,
+});
+
 /**
  * A single catalogue item as a card, for narrow screens where the table's
  * five columns become unreadable.
@@ -53,6 +61,22 @@ export default function CatalogueItemCard({ item }: { item: CatalogueItem }) {
                         <dd className={`mt-0.5 tabular-nums ${item.empty_stock < 0 ? 'text-destructive font-medium' : 'font-medium'}`}>
                             {item.empty_stock}
                         </dd>
+                    </div>
+                )}
+            </dl>
+
+            {/* What a unit of this costs, averaged over every purchase — the
+                same figure a sale of it is costed at. */}
+            <dl className="mt-4 flex gap-6 border-t pt-3 text-sm">
+                <div>
+                    <dt className="text-muted-foreground text-xs">{item.is_gas ? 'Avg. gas cost' : 'Avg. cost'}</dt>
+                    <dd className="mt-0.5 font-medium tabular-nums">{currency.format(item.average_gas_cost)}</dd>
+                </div>
+
+                {item.is_returnable && (
+                    <div>
+                        <dt className="text-muted-foreground text-xs">Avg. cylinder cost</dt>
+                        <dd className="mt-0.5 font-medium tabular-nums">{currency.format(item.average_shell_cost)}</dd>
                     </div>
                 )}
             </dl>

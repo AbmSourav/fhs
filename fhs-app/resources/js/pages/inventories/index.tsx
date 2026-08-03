@@ -32,6 +32,8 @@ export default function InventoriesIndex({ purchases }: { purchases: Paginated<I
                     </Button>
                 </div>
 
+
+
                 {purchases.data.length === 0 ? (
                     <div className="mt-6 flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-16 text-center">
                         <Boxes className="text-muted-foreground size-10" />

@@ -81,6 +81,7 @@ class DashboardService
             'gross_profit'  => $this->withDelta($current['gross_profit'], $previous['gross_profit']),
             'average_order' => $this->withDelta($current['average_order'], $previous['average_order']),
             'collected'     => $this->withDelta($current['collected'], $previous['collected']),
+            'expenses'      => $this->withDelta($current['expenses'], $previous['expenses']),
         ];
     }
 
@@ -247,6 +248,9 @@ class DashboardService
             // Whether a change in revenue came from more sales or bigger ones.
             'average_order' => $salesCount > 0 ? round($revenue / $salesCount, 2) : 0.0,
             'collected'     => $this->collected($start, $end),
+            // Keyed on when the money was spent, so a bill entered late still
+            // belongs to the month it was paid in.
+            'expenses' => $this->otherExpenses($start, $end),
         ];
     }
 
@@ -377,9 +381,11 @@ class DashboardService
             ? ($gasBought / $gasQuantity) * $this->gasUnitsSold()
             : 0.0;
 
+        // Goods only: transport is counted as an expense, so including it here
+        // would charge the same money twice.
         $plainBought = (float) InventoryPurchase::query()
             ->current()
-            ->selectRaw('COALESCE(SUM(unit_cost * quantity + transport_cost), 0) as cost')
+            ->selectRaw('COALESCE(SUM(unit_cost * quantity), 0) as cost')
             ->value('cost');
 
         // Plain goods have no shell, so their frozen cost is unambiguous.
@@ -477,14 +483,51 @@ class DashboardService
     }
 
     /**
-     * Non-stock spending — fuel, wages, rent.
+     * Everything spent that is not the goods themselves.
      *
-     * Soft-deleted expenses are excluded by the model's global scope: a deleted
-     * expense stops counting toward what was spent.
+     * Two sources, because delivery is recorded in a different place from the
+     * rest: the `expenses` table holds fuel, wages and rent, while getting a
+     * consignment to the premises is recorded on the purchase that caused it.
+     * Both are money out, so both belong here.
+     *
+     * Transport is deliberately excluded from stock valuation, so counting it
+     * here charges it exactly once.
      */
-    private function otherExpenses(): float
+    private function otherExpenses(?CarbonImmutable $start = null, ?CarbonImmutable $end = null): float
     {
-        return round((float) Expense::query()->sum('amount'), 2);
+        // Soft-deleted expenses are excluded by the model's global scope: a
+        // deleted expense stops counting toward what was spent.
+        $recorded = (float) Expense::query()
+            ->when($start, fn (Builder $query) => $query->where('spent_at', '>=', $start))
+            ->when($end, fn (Builder $query) => $query->where('spent_at', '<', $end))
+            ->sum('amount');
+
+        return round($recorded + $this->transportCost($start, $end), 2);
+    }
+
+    /**
+     * What it cost to get consignments delivered.
+     *
+     * `current()` on both tables: a corrected purchase leaves its earlier
+     * versions in place, and counting those would charge the delivery again.
+     */
+    private function transportCost(?CarbonImmutable $start = null, ?CarbonImmutable $end = null): float
+    {
+        $withinRange = fn (Builder $query) => $query
+            ->when($start, fn (Builder $q) => $q->where('purchased_at', '>=', $start))
+            ->when($end, fn (Builder $q) => $q->where('purchased_at', '<', $end));
+
+        $gas = (float) GasInventoryPurchase::query()
+            ->current()
+            ->tap($withinRange)
+            ->sum('transport_cost');
+
+        $plain = (float) InventoryPurchase::query()
+            ->current()
+            ->tap($withinRange)
+            ->sum('transport_cost');
+
+        return round($gas + $plain, 2);
     }
 
     /**

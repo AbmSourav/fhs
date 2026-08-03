@@ -5,7 +5,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { type MonthlyFigures, type Trends } from '@/types/dashboard';
 import { Head } from '@inertiajs/react';
-import { Package, Receipt, ShoppingBag, TrendingUp, Wallet } from 'lucide-react';
+import { Banknote, Package, Receipt, ShoppingBag, TrendingUp, Wallet } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
 
@@ -27,7 +27,7 @@ export default function Dashboard({ month, trends }: Props) {
                     <p className="text-muted-foreground mt-1 text-sm">This month so far, against {against}</p>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
                     <StatCard
                         label="Revenue"
                         value={month.revenue.current}
@@ -52,8 +52,14 @@ export default function Dashboard({ month, trends }: Props) {
 
                     {/* Keyed on when payment arrived, so this differs from
                         revenue whenever a customer settles an older sale. */}
-                    <StatCard label="Collected" value={month.collected.current} icon={Wallet} hint="Cash received this month">
+                    <StatCard label="Money received" value={month.collected.current} icon={Wallet} hint="Cash received this month">
                         <DeltaBadge metric={month.collected} against={against} />
+                    </StatCard>
+
+                    <StatCard label="Expenses" value={month.expenses.current} icon={Banknote} hint="Running costs and transport">
+                        {/* Spending less is the good direction here, unlike
+                            every other card in this row. */}
+                        <DeltaBadge metric={month.expenses} against={against} goodDirection="down" />
                     </StatCard>
                 </div>
 
