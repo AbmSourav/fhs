@@ -81,8 +81,27 @@ export interface MonthlyReport {
     net_profit: number;
     /** Cash received in the month, whichever month the sale was in. */
     collected: number;
+    /** What sold, busiest first. Empty in a month with no trading. */
+    items: ReportItem[];
     /** When the report was produced — figures are derived, so this matters. */
     generated_at: string;
+}
+
+/**
+ * One catalogue item's sales in the month.
+ *
+ * Grouped on the catalogue row rather than the name, so two brands sharing a
+ * weight stay apart.
+ */
+export interface ReportItem {
+    name: string;
+    /** Units sold across every transaction type. */
+    quantity: number;
+    /** Units where the cylinder came back. */
+    swapped: number;
+    /** Units where the customer kept it — shells leaving the business. */
+    outright: number;
+    revenue: number;
 }
 
 /** A month offered by the report picker. */

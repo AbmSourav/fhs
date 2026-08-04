@@ -237,18 +237,46 @@ class MonthlyReportTest extends TestCase
                 ->where('report.revenue', 1400));
     }
 
-    public function test_the_page_falls_back_to_the_latest_month(): void
+    public function test_the_page_reports_nothing_until_a_month_is_chosen(): void
     {
         Carbon::setTestNow('2026-08-15 12:00:00');
 
-        // A mistyped or hand-edited URL should still render a usable report
-        // rather than an error page.
+        $this->sellAt('2026-08-10 06:00:00');
+
+        // Landing on a report nobody asked for invites it being read as the
+        // current position, and the month it picked is easy to miss.
+        $this->actingAs($this->user)
+            ->get('/reports')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('report', null));
+    }
+
+    public function test_an_unrecognised_month_reports_nothing_rather_than_guessing(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-08-10 06:00:00');
+
+        // A mistyped or hand-edited URL shows the empty state rather than
+        // quietly substituting a month nobody asked for.
         foreach (['not-a-month', '2026-13', '', '2099-01'] as $month) {
             $this->actingAs($this->user)
                 ->get('/reports?month='.$month)
                 ->assertOk()
-                ->assertInertia(fn ($page) => $page->where('report.month', '2026-08'));
+                ->assertInertia(fn ($page) => $page->where('report', null));
         }
+    }
+
+    public function test_the_month_list_is_offered_even_with_nothing_chosen(): void
+    {
+        Carbon::setTestNow('2026-08-15 12:00:00');
+
+        $this->sellAt('2026-06-10 06:00:00');
+
+        // The picker has to be populated for a month to be choosable at all.
+        $this->actingAs($this->user)
+            ->get('/reports')
+            ->assertInertia(fn ($page) => $page->has('months', 3));
     }
 
     public function test_reports_are_admin_only(): void
@@ -287,12 +315,13 @@ class MonthlyReportTest extends TestCase
         $this->assertNotEmpty($content);
     }
 
-    public function test_the_download_falls_back_like_the_page_does(): void
+    public function test_the_download_falls_back_to_the_latest_month(): void
     {
         Carbon::setTestNow('2026-08-15 12:00:00');
 
-        // A hand-edited URL must not be able to make the PDF report a month the
-        // page itself would refuse to show.
+        // Unlike the page, a download has no empty state to show: a file has to
+        // be for some month, so an unrecognised one yields the most recent
+        // report rather than an error.
         $this->actingAs($this->user)
             ->get('/reports/download?month=2099-01')
             ->assertDownload('fhs-report-august-2026.pdf');

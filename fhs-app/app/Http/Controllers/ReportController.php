@@ -20,17 +20,25 @@ class ReportController extends Controller
     /**
      * A month's trading, for reading on screen.
      *
+     * Nothing is reported until a month is picked. Landing on a report nobody
+     * asked for invites it being read as the current position, and the month it
+     * happened to choose is easy to miss.
+     *
      * The month is a query parameter rather than a path segment so the picker
      * can switch months without leaving the page, and so a report can be
      * bookmarked or linked to.
      */
     public function __invoke(Request $request): Response
     {
-        $months = $this->dashboard->reportableMonths();
+        $month = $request->string('month')->value();
 
         return Inertia::render('reports/index', [
-            'report' => $this->dashboard->monthlyReport($this->monthFrom($request, $months)),
-            'months' => $months,
+            // Null until a real month is asked for, which also means a mistyped
+            // URL shows the empty state rather than someone else's month.
+            'report' => BusinessCalendar::isValidMonth($month)
+                ? $this->dashboard->monthlyReport($month)
+                : null,
+            'months' => $this->dashboard->reportableMonths(),
         ]);
     }
 
@@ -66,8 +74,9 @@ class ReportController extends Controller
     /**
      * The month being asked for, or the latest if that makes no sense.
      *
-     * Shared by both routes so a hand-edited URL cannot make the PDF report a
-     * month the page would refuse to show.
+     * For the two PDF routes only. A file has to be for some month — there is
+     * no empty state to fall back to the way the page has — so an unrecognised
+     * one yields the most recent report rather than an error.
      *
      * @param  array<int, array{value: string, label: string}>  $months
      */
