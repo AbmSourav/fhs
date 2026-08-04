@@ -129,7 +129,7 @@
     --sidebar-foreground: hsl(240, 5.3%, 30%);
     --sidebar-primary: hsl(0, 0%, 10%);
     --sidebar-primary-foreground: hsl(0, 0%, 98%);
-    --sidebar-accent: hsl(0, 0%, 94%);
+    --sidebar-accent: hsl(0, 0%, 89%);
     --sidebar-accent-foreground: hsl(0, 0%, 30%);
     --sidebar-border: hsl(0, 0%, 91%);
     --sidebar-ring: hsl(217.2, 91.2%, 59.8%);
@@ -177,5 +177,46 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/**
+ * Printing.
+ *
+ * Reports are saved as PDFs through the browser's own print dialog, so what
+ * prints has to be the document rather than the application around it. This is
+ * global rather than page-level because the chrome being hidden — sidebar,
+ * header, toasts — belongs to the layout, not to the page asking to print.
+ */
+@media print {
+    /* Marked by the layout and by anything that is a control rather than
+       content. */
+    [data-print='hide'] {
+        display: none !important;
+    }
+
+    /* The app paints a dark or tinted background; paper is white, and printing
+       a full-bleed colour wastes ink and makes text harder to read. */
+    body {
+        background: #fff !important;
+        color: #000 !important;
+    }
+
+    /* The shell scrolls its own panes on screen. Left alone, only the first
+       screenful reaches the page. */
+    html,
+    body,
+    [data-print='surface'] {
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* Keeps a figure and its label from being split across two sheets. */
+    [data-print='block'] {
+        break-inside: avoid;
+    }
+
+    @page {
+        margin: 16mm;
     }
 }

@@ -102,6 +102,73 @@ final class BusinessCalendar
     }
 
     /**
+     * The month a "YYYY-MM" string names, as UTC bounds.
+     *
+     * Parsed on the business clock, so the bounds are Dhaka month boundaries
+     * like every other range here rather than UTC ones.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable}
+     */
+    public static function monthRangeFor(string $month): array
+    {
+        return self::monthRange(self::parseMonth($month));
+    }
+
+    /** "2026-08" as the first instant of that month, on the business clock. */
+    public static function parseMonth(string $month): CarbonImmutable
+    {
+        return CarbonImmutable::createFromFormat('Y-m-d H:i:s', $month.'-01 00:00:00', self::TIME_ZONE)
+            ->startOfMonth();
+    }
+
+    /** Whether a string names a real calendar month. */
+    public static function isValidMonth(string $month): bool
+    {
+        if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month) !== 1) {
+            return false;
+        }
+
+        // Not in the future: a month that has not happened has nothing to
+        // report, and offering it would only produce a page of zeroes.
+        return self::parseMonth($month) <= self::now()->startOfMonth();
+    }
+
+    /**
+     * Calendar months from $earliest through the month in progress, newest first.
+     *
+     * Newest first because a report is almost always wanted for the month just
+     * gone, which should be at the top of the list rather than the bottom.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public static function monthsSince(?CarbonImmutable $earliest): array
+    {
+        $current = self::now()->startOfMonth();
+
+        // Nothing recorded yet, so the only month worth offering is this one.
+        $cursor = $earliest?->setTimezone(self::TIME_ZONE)->startOfMonth() ?? $current;
+
+        // A clock skew or a backdated record from the future would otherwise
+        // run this loop backwards forever.
+        if ($cursor > $current) {
+            $cursor = $current;
+        }
+
+        $months = [];
+
+        while ($cursor <= $current) {
+            $months[] = [
+                'value' => $cursor->format('Y-m'),
+                'label' => $cursor->format('F Y'),
+            ];
+
+            $cursor = $cursor->addMonthNoOverflow();
+        }
+
+        return array_reverse($months);
+    }
+
+    /**
      * Every day of the month containing $at, oldest first.
      *
      * Days are Dhaka days, so each runs 18:00–18:00 in UTC. Bucketing on the

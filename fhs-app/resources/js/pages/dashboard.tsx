@@ -1,5 +1,7 @@
 import DeltaBadge from '@/components/dashboard/delta-badge';
 import StatCard from '@/components/dashboard/stat-card';
+// TransactionMixChart is kept for the commented-out panel below.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { DailyRevenueChart, NetProfitTrendChart, RevenueTrendChart, TransactionMixChart } from '@/components/dashboard/trend-charts';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';

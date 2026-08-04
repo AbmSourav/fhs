@@ -60,6 +60,40 @@ export interface Trends {
 }
 
 /**
+ * One calendar month's trading, as a report.
+ *
+ * No deltas: a report states what a period was. How it compared with the month
+ * before is the dashboard's question, not this one.
+ */
+export interface MonthlyReport {
+    /** "2026-08" — what the picker round-trips. */
+    month: string;
+    month_label: string;
+    revenue: number;
+    sales_count: number;
+    /** What the goods sold cost, frozen at the moment of each sale. */
+    cogs: number;
+    average_order: number;
+    gross_profit: number;
+    /** The expenses table plus consignment transport. */
+    expenses: number;
+    /** Gross profit less expenses. Negative on a loss. */
+    net_profit: number;
+    /** Cash received in the month, whichever month the sale was in. */
+    collected: number;
+    /** When the report was produced — figures are derived, so this matters. */
+    generated_at: string;
+}
+
+/** A month offered by the report picker. */
+export interface ReportMonth {
+    /** "2026-08". */
+    value: string;
+    /** "August 2026". */
+    label: string;
+}
+
+/**
  * Life-of-the-business totals.
  *
  * No deltas: these are balances covering everything ever recorded, not a

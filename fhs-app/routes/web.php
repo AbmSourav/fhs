@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\StatisticsController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -56,6 +57,13 @@ Route::middleware(['auth'])->group(function () {
             ->name('orders.customer-lookup');
 
         Route::get('statistics', StatisticsController::class)->name('statistics');
+
+        Route::get('reports', ReportController::class)->name('reports');
+        // Built server-side from the database, so the figures cannot be edited
+        // on the way out the way a printed page can.
+        Route::get('reports/download', [ReportController::class, 'download'])->name('reports.download');
+        // The same PDF rendered in the browser, for working on the template.
+        Route::get('reports/preview', [ReportController::class, 'preview'])->name('reports.preview');
 
         Route::get('crm', [CrmController::class, 'index'])->name('crm');
         // Logs the call, then hands off to the write-up form.

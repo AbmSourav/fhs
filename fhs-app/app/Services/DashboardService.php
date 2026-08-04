@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\TransactionType;
+use App\Models\Catalogue;
 use App\Models\Expense;
 use App\Models\GasInventoryPurchase;
 use App\Models\InventoryPurchase;
@@ -85,6 +86,104 @@ class DashboardService
             'expenses'      => $this->withDelta($current['expenses'], $previous['expenses']),
             'net_profit'    => $this->withDelta($current['net_profit'], $previous['net_profit']),
         ];
+    }
+
+    /**
+     * One calendar month's trading, for a report.
+     *
+     * The same figures the dashboard shows for the month in progress, but for
+     * any month and with no comparison: a report states what a period was, and
+     * a delta against the month before is a different question.
+     *
+     * @return array<string, mixed>
+     */
+    public function monthlyReport(string $month): array
+    {
+        [$start, $end] = BusinessCalendar::monthRangeFor($month);
+
+        $figures = $this->figuresFor($start, $end);
+
+        return [
+            'month'       => $month,
+            'month_label' => BusinessCalendar::monthLabel(BusinessCalendar::parseMonth($month)),
+            'revenue'     => $figures['revenue'],
+            'sales_count' => $figures['sales_count'],
+            'cogs'        => $this->costOfGoodsSold($start, $end),
+            // Kept alongside the money so a reader can see how the month's
+            // takings divide up.
+            'average_order' => $figures['average_order'],
+            'gross_profit'  => $figures['gross_profit'],
+            'expenses'      => $figures['expenses'],
+            'net_profit'    => $figures['net_profit'],
+            'collected'     => $figures['collected'],
+            // What actually sold, so the money above can be read against the
+            // goods that produced it.
+            'items' => $this->salesByItem($start, $end),
+            // Stamped so a printed copy says when it was produced. Figures are
+            // derived rather than stored, so a report run later may differ if
+            // records for the month were corrected in the meantime.
+            'generated_at' => BusinessCalendar::now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * What sold in a month, item by item.
+     *
+     * Grouped on the catalogue row rather than the name: two brands can share a
+     * weight, and merging them would quietly overstate one of them.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function salesByItem(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $rows = OrderItem::query()
+            ->whereIn('order_id', $this->soldOrderIds($start, $end))
+            ->selectRaw('catalogue_id')
+            ->selectRaw('COALESCE(SUM(quantity), 0) as quantity')
+            ->selectRaw('COALESCE(SUM(line_total), 0) as revenue')
+            // A swap returns the shell; the other kinds do not. Worth splitting
+            // out, since a month heavy on outright sales is draining cylinders
+            // out of circulation.
+            ->selectRaw('COALESCE(SUM(CASE WHEN transaction_type = ? THEN quantity ELSE 0 END), 0) as swapped', [
+                TransactionType::Swap->value,
+            ])
+            ->groupBy('catalogue_id')
+            ->orderByDesc('quantity')
+            ->get();
+
+        // Soft-deleted items still appear: a product withdrawn today was still
+        // sold last month, and leaving it out would lose the sale.
+        $items = Catalogue::query()
+            ->withTrashed()
+            ->with('brand')
+            ->findMany($rows->pluck('catalogue_id'))
+            ->keyBy('id');
+
+        return $rows->map(fn (OrderItem $row) => [
+            'name'     => $items[$row->catalogue_id]?->displayName() ?? 'Removed item',
+            'quantity' => (int) $row->quantity,
+            'swapped'  => (int) $row->swapped,
+            // Whatever was not a swap left the shell with the customer.
+            'outright' => (int) $row->quantity - (int) $row->swapped,
+            'revenue'  => round((float) $row->revenue, 2),
+        ])->all();
+    }
+
+    /**
+     * The months there is anything to report on.
+     *
+     * Anchored on the first sale rather than a fixed window, so the list covers
+     * exactly the life of the business.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function reportableMonths(): array
+    {
+        $firstSale = Order::query()->happened()->min('occurred_at');
+
+        return BusinessCalendar::monthsSince(
+            $firstSale !== null ? CarbonImmutable::parse($firstSale) : null,
+        );
     }
 
     /**

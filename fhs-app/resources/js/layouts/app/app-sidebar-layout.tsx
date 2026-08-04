@@ -6,10 +6,16 @@ import { type BreadcrumbItem } from '@/types';
 
 export default function AppSidebarLayout({ children, breadcrumbs = [] }: { children: React.ReactNode; breadcrumbs?: BreadcrumbItem[] }) {
     return (
+        // The sidebar and header are application chrome, not content: printing
+        // a report should put the document on the page and nothing else.
         <AppShell variant="sidebar">
-            <AppSidebar />
-            <AppContent variant="sidebar">
-                <AppSidebarHeader breadcrumbs={breadcrumbs} />
+            <div data-print="hide" className="contents">
+                <AppSidebar />
+            </div>
+            <AppContent variant="sidebar" data-print="surface">
+                <div data-print="hide">
+                    <AppSidebarHeader breadcrumbs={breadcrumbs} />
+                </div>
                 {children}
             </AppContent>
         </AppShell>
