@@ -1,9 +1,10 @@
 import { DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
+import { isDarkTheme, useAppearance } from '@/hooks/use-appearance';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { type User } from '@/types';
 import { Link } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Moon, Settings, Sun } from 'lucide-react';
 
 interface UserMenuContentProps {
     user: User;
@@ -11,6 +12,15 @@ interface UserMenuContentProps {
 
 export function UserMenuContent({ user }: UserMenuContentProps) {
     const cleanup = useMobileNavigation();
+    const { appearance, updateAppearance } = useAppearance();
+
+    // Resolved rather than read straight off the setting: 'system' is a valid
+    // preference but not a theme, and the label has to name what is showing.
+    const isDark = isDarkTheme(appearance);
+
+    // Toggling commits to a mode, so a user who was on 'system' stops
+    // following the OS. That is the point — they asked for a specific theme.
+    const toggleTheme = () => updateAppearance(isDark ? 'light' : 'dark');
 
     return (
         <>
@@ -26,6 +36,13 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
                         <Settings className="mr-2" />
                         Settings
                     </Link>
+                </DropdownMenuItem>
+
+                {/* Names the mode it switches to, not the one in force: a menu
+                    item reads as the action it performs. */}
+                <DropdownMenuItem onSelect={toggleTheme}>
+                    {isDark ? <Sun className="mr-2 size-4" /> : <Moon className="mr-2 size-4" />}
+                    {isDark ? 'Light mode' : 'Dark mode'}
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

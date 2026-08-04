@@ -129,7 +129,7 @@ function ReportBody({ report }: { report: MonthlyReport }) {
             {/* Nothing sold means nothing to break down, and an empty list says
                 less than no list at all. */}
             {report.items.length > 0 && (
-                <section className="mt-7 pt-5 border-t">
+                <section className="mt-7 pt-5 border-t-2">
                     <SectionTitle>Sales by item</SectionTitle>
 
                     <div className="mt-3">

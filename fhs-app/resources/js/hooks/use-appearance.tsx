@@ -4,10 +4,16 @@ export type Appearance = 'light' | 'dark' | 'system';
 
 const prefersDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-const applyTheme = (appearance: Appearance) => {
-    const isDark = appearance === 'dark' || (appearance === 'system' && prefersDark());
+/**
+ * Which theme a setting actually resolves to.
+ *
+ * 'system' is a real setting but not a real theme, so anything that needs to
+ * know what is on screen — a toggle's label, for instance — has to resolve it.
+ */
+export const isDarkTheme = (appearance: Appearance) => appearance === 'dark' || (appearance === 'system' && prefersDark());
 
-    document.documentElement.classList.toggle('dark', isDark);
+const applyTheme = (appearance: Appearance) => {
+    document.documentElement.classList.toggle('dark', isDarkTheme(appearance));
 };
 
 const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
