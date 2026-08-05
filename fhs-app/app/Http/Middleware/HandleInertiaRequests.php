@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\UserRole;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -48,11 +50,17 @@ class HandleInertiaRequests extends Middleware
                 // rendering; every privileged route must still authorise on the
                 // server via the "admin" gate.
                 'isAdmin' => (bool) $request->user()?->isAdmin(),
+                // So a button the server would refuse is not offered in the
+                // first place. An investor sees every page but no Add, Edit or
+                // Delete; the read-only middleware is what actually stops them.
+                'canWrite'       => Gate::allows('write'),
+                'canManageUsers' => Gate::allows('manage-users'),
             ],
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error'   => $request->session()->get('error'),
             ],
+            'userRoles' => UserRole::roles(),
         ]);
     }
 }

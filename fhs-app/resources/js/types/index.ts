@@ -1,9 +1,19 @@
 import { LucideIcon } from 'lucide-react';
+// Imported as well as re-exported below: `export … from` does not bring the
+// name into this file's scope, and Auth refers to it.
+import { type User } from './user';
 
 export interface Auth {
+    // Typed non-null because every page using it sits behind auth. The server
+    // does share null for a guest, so a page rendered outside the auth
+    // middleware must not assume this.
     user: User;
     /** Convenience flag for admin-only UI; the server still authorises. */
     isAdmin: boolean;
+    /** False for an investor: they read every page but change nothing. */
+    canWrite: boolean;
+    /** Administrators only — founders cannot create or remove accounts. */
+    canManageUsers: boolean;
 }
 
 export interface BreadcrumbItem {
@@ -29,6 +39,8 @@ export interface SharedData {
     auth: Auth;
     /** One-request-only messages from the server, surfaced as toasts. */
     flash: Flash;
+    /** The role enum, keyed by stored value: { investor: 'Investor', … }. */
+    userRoles: Record<string, string>;
     [key: string]: unknown;
 }
 
@@ -37,13 +49,6 @@ export interface Flash {
     error: string | null;
 }
 
-export interface User {
-    id: number;
-    name: string;
-    email: string;
-    avatar?: string;
-    email_verified_at: string | null;
-    created_at: string;
-    updated_at: string;
-    [key: string]: unknown; // This allows for additional properties...
-}
+// User shapes live in ./user, re-exported here so `@/types` stays the one
+// import path for the shared types a page reaches for.
+export type { ManagedUser, RoleOption, User, UserPermission } from './user';

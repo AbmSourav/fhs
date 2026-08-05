@@ -6,14 +6,6 @@ import { Link, usePage } from '@inertiajs/react';
 import { Boxes, ChartColumn, FileText, LayoutGrid, Package, PhoneCall, Receipt, ShoppingBag, Users } from 'lucide-react';
 import AppLogo from './app-logo';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        url: '/dashboard',
-        icon: LayoutGrid,
-    },
-];
-
 const adminNavItems: NavItem[] = [
     {
         title: 'Statistics',
@@ -57,12 +49,23 @@ const adminNavItems: NavItem[] = [
     },
 ];
 
-export function AppSidebar() {
-    const { auth } = usePage<SharedData>().props;
+const mainNavItems: NavItem[] = [
+    {
+        title: 'Dashboard',
+        url: '/dashboard',
+        icon: LayoutGrid,
+    },
+];
 
-    // Hiding the link is presentation only — the routes are gated server-side
-    // by the `admin` gate.
-    const items = auth.isAdmin ? [...mainNavItems, ...adminNavItems] : mainNavItems;
+export function AppSidebar() {
+    const { auth, userRoles } = usePage<SharedData>().props;
+
+    // Compared against the enum's own keys, which are the stored values. Going
+    // through the labels would break the moment one is reworded.
+    const userRole = auth.user?.permission?.role?.toLowerCase();
+    const founderOrInvestor = userRole !== undefined && Object.keys(userRoles).includes(userRole);
+
+    const items = auth.isAdmin || founderOrInvestor ? [...mainNavItems, ...adminNavItems] : mainNavItems;
 
     return (
         <Sidebar collapsible="icon" variant="inset">

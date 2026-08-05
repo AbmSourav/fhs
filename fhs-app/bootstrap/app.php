@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ReadOnlyUser;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,6 +17,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->alias([
+            // Refuses write verbs for a view-only account. Applied to the
+            // business route group as a whole, so a route added later is
+            // covered without anyone remembering to annotate it.
+            'read-only' => ReadOnlyUser::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
