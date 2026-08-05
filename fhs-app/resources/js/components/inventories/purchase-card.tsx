@@ -3,8 +3,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BUSINESS_TIME_ZONE, formatDate } from '@/lib/datetime';
 import { type InventoryPurchase } from '@/types/inventory';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Pencil, RotateCcw } from 'lucide-react';
+import { type SharedData } from '@/types';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
 const currency = new Intl.NumberFormat('en-BD', {
@@ -32,10 +33,12 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 
 /** A single recorded purchase. */
 export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase }) {
+    const { auth } = usePage<SharedData>().props;
     const { catalogue } = purchase;
 
     const title = (catalogue.is_gas ? catalogue.brand_name : null) ?? purchase.display_name;
     const productDetail = [catalogue.type_label, `${catalogue.weight}kg`].filter(Boolean).join(' · ');
+    const footerBorder = auth.canWrite ? 'border-t' : '';
 
     return (
         <li className="rounded-lg border-2 py-2 px-3">
@@ -132,13 +135,13 @@ export default function PurchaseCard({ purchase }: { purchase: InventoryPurchase
                             </p>
                         )}
 
-                        <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
+                        <div className={`mt-3 flex items-center justify-between gap-3 ${footerBorder} pt-3`}>
                             <p className="text-muted-foreground text-xs">
                                 {purchase.edited_at ? `Updated: ${dateTime.format(new Date(purchase.edited_at))}` : ''}
                             </p>
 
                             {purchase.is_editable && (
-                                <Button variant="outline" className="p-2 h-7 gap-1" size="sm" asChild>
+                                <Button variant="outline" asChild can={auth.canWrite} className="p-2 h-7 gap-1" size="sm">
                                     <Link href={`/inventories/edit/${purchase.kind}/${purchase.id}`}>
                                         <Pencil className="size-3" />
                                         Edit

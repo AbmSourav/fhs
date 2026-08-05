@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { formatDateTime } from '@/lib/datetime';
 import { type Expense } from '@/types/expense';
-import { Link, useForm } from '@inertiajs/react';
+import { type SharedData } from '@/types';
+import { Link, useForm, usePage } from '@inertiajs/react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { FormEventHandler } from 'react';
 
@@ -21,6 +22,7 @@ const date = formatDateTime;
 
 /** A single recorded expense. */
 export default function ExpenseCard({ expense }: { expense: Expense }) {
+    const { auth } = usePage<SharedData>().props;
     const { delete: destroy, processing } = useForm();
 
     const remove: FormEventHandler = (e) => {
@@ -28,6 +30,8 @@ export default function ExpenseCard({ expense }: { expense: Expense }) {
 
         destroy(`/expenses/${expense.id}`, { preserveScroll: true });
     };
+
+    const footerBorder = auth.canWrite ? 'border-t' : '';
 
     return (
         <li className="rounded-lg border-2 px-3 py-2">
@@ -54,10 +58,10 @@ export default function ExpenseCard({ expense }: { expense: Expense }) {
                 </p>
             )}
 
-            <div className="mt-3 flex items-center justify-end gap-2 border-t pt-3">
+            <div className={`mt-3 flex items-center justify-end gap-2 ${footerBorder} pt-3`}>
                 {/* Correcting closes after an hour; deleting never does. */}
                 {expense.is_editable && (
-                    <Button variant="outline" size="sm" className="h-7 gap-1 p-2" asChild>
+                    <Button can={auth.canWrite} variant="outline" size="sm" className="h-7 gap-1 p-2" asChild>
                         <Link href={`/expenses/edit/${expense.id}`}>
                             <Pencil className="size-3" />
                             Edit
@@ -67,7 +71,7 @@ export default function ExpenseCard({ expense }: { expense: Expense }) {
 
                 <Dialog>
                     <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-destructive h-7 gap-1 p-2">
+                        <Button can={auth.canWrite} variant="ghost" size="sm" className="text-destructive h-7 gap-1 p-2">
                             <Trash2 className="size-3" />
                             Delete
                         </Button>

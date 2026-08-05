@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/datetime';
 import { cn } from '@/lib/utils';
 import { type Order } from '@/types/order';
-import { Link } from '@inertiajs/react';
+import { type SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/react';
 import { type VariantProps } from 'class-variance-authority';
 import { Pencil, Wallet } from 'lucide-react';
 
@@ -31,6 +32,7 @@ const paymentBadge: Record<Order['payment_state'], { label: string; variant: Bad
 
 /** A single recorded sale. */
 export default function OrderCard({ order }: { order: Order }) {
+    const { auth } = usePage<SharedData>().props;
     const badge = paymentBadge[order.payment_state];
 
     return (
@@ -122,7 +124,7 @@ export default function OrderCard({ order }: { order: Order }) {
                                 <div className="flex shrink-0 items-center gap-2">
                                     {/* Only a sale with a balance can be settled. */}
                                     {order.due_amount > 0 && (
-                                        <Button size="sm" className="h-7 gap-1 p-2" asChild>
+                                        <Button size="sm" can={auth.canWrite} className="h-7 gap-1 p-2" asChild>
                                             <Link href={`/orders/pay/${order.id}`}>
                                                 <Wallet className="size-3" />
                                                 Pay
@@ -131,7 +133,7 @@ export default function OrderCard({ order }: { order: Order }) {
                                     )}
 
                                     {order.is_editable && (
-                                        <Button variant="outline" size="sm" className="h-7 gap-1 p-2" asChild>
+                                        <Button variant="outline" size="sm" can={auth.canWrite} className="h-7 gap-1 p-2" asChild>
                                             <Link href={`/orders/edit/${order.id}`}>
                                                 <Pencil className="size-3" />
                                                 Edit

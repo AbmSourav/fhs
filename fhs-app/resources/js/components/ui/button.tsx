@@ -32,9 +32,24 @@ const buttonVariants = cva(
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
     asChild?: boolean;
+    /**
+     * Render nothing when false.
+     *
+     * For hiding an action the user is not allowed to take, so a button the
+     * server would refuse is never offered. Defaults to true, so a button
+     * without an opinion behaves as it always has.
+     *
+     * Presentation only: every route this hides is still authorised on the
+     * server. Hiding a button is a courtesy, never a control.
+     */
+    can?: boolean;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ className, variant, size, asChild = false, ...props }, ref) => {
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ className, variant, size, asChild = false, can = true, ...props }, ref) => {
+    if (!can) {
+        return null;
+    }
+
     const Comp = asChild ? Slot : 'button';
     return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
 });

@@ -2,14 +2,18 @@ import CatalogueItemCard from '@/components/catalogue/catalogue-item-card';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type SharedData } from '@/types';
 import { type CatalogueItem } from '@/types/catalogue';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { Package, Plus } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Catalogue', href: '/catalogue' }];
 
 export default function CatalogueIndex({ items }: { items: CatalogueItem[] }) {
+    // A view-only account is refused the setup page server-side, so offering
+    // the way in would only lead them to a 403.
+    const { auth } = usePage<SharedData>().props;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Catalogue" />
@@ -20,7 +24,7 @@ export default function CatalogueIndex({ items }: { items: CatalogueItem[] }) {
 
                     {/* self-start stops the column layout stretching it to full
                         width on mobile; it sizes to its content instead. */}
-                    <Button asChild className="shrink-0 self-start">
+                    <Button asChild can={auth.canWrite} className="shrink-0 self-start">
                         <Link href="/catalogue/setup">
                             <Plus className="mr-1 size-4" />
                             Setup

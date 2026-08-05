@@ -2,7 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BUSINESS_TIME_ZONE } from '@/lib/datetime';
 import { type Customer } from '@/types/customer';
-import { Link } from '@inertiajs/react';
+import { type SharedData } from '@/types';
+import { Link, usePage } from '@inertiajs/react';
 import { Clock, History, MapPin, Pencil, Repeat } from 'lucide-react';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
@@ -25,6 +26,8 @@ const date = new Intl.DateTimeFormat('en-GB', {
 
 /** A single customer with their trading history. */
 export default function CustomerCard({ customer }: { customer: Customer }) {
+    const { auth } = usePage<SharedData>().props;
+
     return (
         <li className="rounded-lg border-2 p-3">
             <div className="flex items-start justify-between gap-3">
@@ -60,7 +63,7 @@ export default function CustomerCard({ customer }: { customer: Customer }) {
                         </Badge>
                     )}
 
-                    <Button variant="secondary" size="sm" className="rounded-full h-7 gap-1 p-2 mr-1" asChild>
+                    <Button variant="secondary" size="sm" can={auth.canWrite} className="rounded-full h-7 gap-1 p-2 mr-1" asChild>
                         <Link href={`/customers/edit/${customer.id}`}>
                             <Pencil className="size-3" />
                         </Link>

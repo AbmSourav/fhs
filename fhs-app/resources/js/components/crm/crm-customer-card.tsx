@@ -2,7 +2,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BUSINESS_TIME_ZONE } from '@/lib/datetime';
 import { type CrmCustomer } from '@/types/customer';
-import { Link, router } from '@inertiajs/react';
+import { type SharedData } from '@/types';
+import { Link, router, usePage } from '@inertiajs/react';
 import { Clock, History, MapPin, Phone, Repeat } from 'lucide-react';
 import { useState } from 'react';
 
@@ -57,6 +58,7 @@ function sinceLabel(days: number | null): string {
  * been and offers the call, which is the only reason the page exists.
  */
 export default function CrmCustomerCard({ customer }: { customer: CrmCustomer }) {
+    const { auth } = usePage<SharedData>().props;
     const [calling, setCalling] = useState(false);
 
     const call = () => {
@@ -162,7 +164,7 @@ export default function CrmCustomerCard({ customer }: { customer: CrmCustomer })
                 </Button>
 
                 {/* Nothing to dial without a number, and no call to log. */}
-                <Button size="sm" className="h-7 gap-1 px-3" onClick={call} disabled={calling || !customer.mobile_number}>
+                <Button size="sm" className="h-7 gap-1 px-3" onClick={call} disabled={calling || !customer.mobile_number || !auth.canWrite}>
                     <Phone className="size-3" />
                     Call
                 </Button>

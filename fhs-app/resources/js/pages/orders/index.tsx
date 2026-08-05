@@ -2,15 +2,17 @@ import OrderCard from '@/components/orders/order-card';
 import PaginationNav from '@/components/pagination-nav';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type SharedData } from '@/types';
 import { type Order } from '@/types/order';
 import { type Paginated } from '@/types/pagination';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { Plus, ShoppingBag } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Orders', href: '/orders' }];
 
 export default function OrdersIndex({ orders }: { orders: Paginated<Order> }) {
+    const { auth } = usePage<SharedData>().props;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Orders" />
@@ -24,7 +26,7 @@ export default function OrdersIndex({ orders }: { orders: Paginated<Order> }) {
 
                     {/* self-start stops the column layout stretching it to full
                         width on mobile; it sizes to its content instead. */}
-                    <Button asChild className="shrink-0 self-start">
+                    <Button asChild can={auth.canWrite} className="shrink-0 self-start">
                         <Link href="/orders/add">
                             <Plus className="mr-1 size-4" />
                             Record a sale

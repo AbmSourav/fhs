@@ -2,9 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatDateTime } from '@/lib/datetime';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type SharedData } from '@/types';
 import { type CustomerProfile, type TimelineCall, type TimelinePayment, type TimelineSale } from '@/types/customer';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { ArrowLeft, Clock, MapPin, Package, Pencil, Phone, PhoneMissed, Wallet } from 'lucide-react';
 
 // narrowSymbol gives the ৳ sign; the default for BDT is the "BDT" code.
@@ -40,6 +40,7 @@ interface Props {
 }
 
 export default function CustomerHistory({ customer, returnTo }: Props) {
+    const { auth } = usePage<SharedData>().props;
     const fromCrm = returnTo.href.includes('/crm');
 
     const breadcrumbs: BreadcrumbItem[] = [
@@ -84,7 +85,7 @@ export default function CustomerHistory({ customer, returnTo }: Props) {
                         )}
                     </div>
 
-                    <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1 self-start" asChild>
+                    <Button can={auth.canWrite} variant="outline" size="sm" className="h-8 shrink-0 gap-1 self-start" asChild>
                         <Link href={`/customers/edit/${customer.id}`}>
                             <Pencil className="size-3" />
                             Edit
